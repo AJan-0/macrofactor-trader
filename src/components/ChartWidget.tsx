@@ -92,6 +92,7 @@ export default function ChartWidget() {
   const strategyLineRefs = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const workerRef = useRef<Worker | null>(null);
   const skipNextZoomRef = useRef(false);
+  const dataGenRef = useRef(0);
 
   const symbol = useAppStore(s => s.currentSymbol);
   const timeframe = useAppStore(s => s.currentTimeframe);
@@ -311,6 +312,7 @@ export default function ChartWidget() {
     const chart = chartRef.current;
 
     let cancelled = false;
+    const currentGen = dataGenRef.current;
 
     async function run() {
       // 1. 计算策略（Worker 优先）
@@ -319,7 +321,7 @@ export default function ChartWidget() {
         klines,
         workerRef.current
       );
-      if (cancelled) return;
+      if (cancelled || currentGen !== dataGenRef.current) return;
 
       setStrategyOutputs(newOutputs);
 
@@ -340,13 +342,10 @@ export default function ChartWidget() {
         }
       }
 
-      // 3. 清理旧策略线条
+      // 3. 无条件清理所有旧策略线条（防止 symbol/timeframe 切换时残留）
       for (const [lineId, series] of strategyLineRefs.current) {
-        const strategyId = lineId.split('-')[0];
-        if (!activeStrategies.some(s => s.id === strategyId)) {
-          chart.removeSeries(series);
-          strategyLineRefs.current.delete(lineId);
-        }
+        try { chart.removeSeries(series); } catch {}
+        strategyLineRefs.current.delete(lineId);
       }
 
       // 4. 绘制策略线条
@@ -472,12 +471,14 @@ export default function ChartWidget() {
     const volumeSeries = volumeRef.current;
     const container = containerRef.current;
 
-    // 1. 清理旧策略线条
+    // 1. 清理旧策略线条与状态
     for (const [, series] of strategyLineRefs.current) {
       try { chart.removeSeries(series); } catch {}
     }
     strategyLineRefs.current.clear();
     setStrategyOutputs(new Map());
+    dataGenRef.current += 1;
+    const currentGen = dataGenRef.current;
 
     // 2. 显示骨架屏
     setLoading(true);
@@ -526,6 +527,15 @@ export default function ChartWidget() {
       if (markers.length) (candleSeries as any).setMarkers?.(markers);
 
       setEvents(factors);
+      // 防御性清理：加载期间可能有意外的策略线条被绘制
+      if (currentGen === dataGenRef.current) {
+        for (const [, series] of strategyLineRefs.current) {
+          try { chart.removeSeries(series); } catch {}
+        }
+        strategyLineRefs.current.clear();
+        setStrategyOutputs(new Map());
+      }
+
       klinesRef.current = klines;
 
       requestAnimationFrame(() => {
@@ -547,6 +557,7 @@ export default function ChartWidget() {
         try { chart.removeSeries(series); } catch {}
       }
       strategyLineRefs.current.clear();
+      setStrategyOutputs(new Map());
       setChartReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
