@@ -6,6 +6,9 @@ import FactorDashboard from "@/components/FactorDashboard";
 import FactorTimeline from "@/components/FactorTimeline";
 import NarrativeBar from "@/components/NarrativeBar";
 import UpcomingCalendar from "@/components/UpcomingCalendar";
+import MobileNav from "@/components/MobileNav";
+import MobileSheet from "@/components/MobileSheet";
+import NewsFeed from "@/components/NewsFeed";
 import { useAppStore } from "@/store/appStore";
 import {
   loadUserFactors, saveUserFactors, BUILTIN_LIBRARY, applyWeightTemplate,
@@ -16,6 +19,7 @@ import { analyzeFactors } from "@/services/factorEngine";
 import type { FactorCombination, FactorItem } from "@/services/factorEngine";
 import { loadBacktestData, calculateSummary } from "@/services/backtestEngine";
 import type { BacktestRecord, BacktestSummary } from "@/services/backtestEngine";
+import type { MobileTab } from "@/components/MobileNav";
 
 export default function Dashboard() {
   const events = useAppStore(s => s.events);
@@ -25,6 +29,10 @@ export default function Dashboard() {
   const [backtestRecords, setBacktestRecords] = useState<BacktestRecord[]>([]);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>("");
+
+  // 移动端状态
+  const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // 初始化因子引擎
   useEffect(() => {
@@ -136,15 +144,80 @@ export default function Dashboard() {
     });
   }, []);
 
+  // 移动端 Tab 切换时自动打开 Sheet
+  const handleMobileTabChange = useCallback((tab: MobileTab) => {
+    setMobileTab(tab);
+    if (tab !== "chart") {
+      setSheetOpen(true);
+    } else {
+      setSheetOpen(false);
+    }
+  }, []);
+
+  // Sheet 关闭时如果当前不是 chart，切回 chart
+  const handleSheetClose = useCallback(() => {
+    setSheetOpen(false);
+    setMobileTab("chart");
+  }, []);
+
+  // Sheet 标题
+  const sheetTitle =
+    mobileTab === "factors" ? "因子面板"
+    : mobileTab === "news" ? "新闻信息流"
+    : mobileTab === "data" ? "回测数据"
+    : "";
+
+  // Sheet 内容
+  const sheetContent = (
+    mobileTab === "factors" ? (
+      <FactorDashboard
+        combo={combo}
+        factors={factors}
+        backtestRecords={backtestRecords}
+        backtestSummary={backtestSummary}
+        onToggleFactor={toggleFactor}
+        onAdjustProb={adjustProbability}
+        onAdjustWeight={adjustWeight}
+        onAddCustom={addCustom}
+        onReset={handleReset}
+        onApplyTemplate={handleApplyTemplate}
+        onEnableAll={handleEnableAll}
+        onDisableAll={handleDisableAll}
+        onEnableThisWeek={handleEnableThisWeek}
+        onEnableNextWeek={handleEnableNextWeek}
+      />
+    ) : mobileTab === "news" ? (
+      <NewsFeed onAddAsFactor={addCustom} />
+    ) : mobileTab === "data" ? (
+      <div className="p-4 text-[12px] text-[#94a3b8]">
+        <div className="mb-2 font-bold text-[#e2e8f0]">回测概览</div>
+        {backtestSummary ? (
+          <div className="space-y-1">
+            <div>总样本: {backtestSummary.total}</div>
+            <div>1日准确率: {(backtestSummary.accuracy_1d * 100).toFixed(1)}%</div>
+            <div>7日准确率: {(backtestSummary.accuracy_7d * 100).toFixed(1)}%</div>
+            <div>1日命中: {backtestSummary.correct_1d}/{backtestSummary.total}</div>
+            <div>7日命中: {backtestSummary.correct_7d}/{backtestSummary.total}</div>
+          </div>
+        ) : (
+          <div>暂无回测数据</div>
+        )}
+      </div>
+    ) : null
+  );
+
   return (
     <div className="flex flex-col h-screen bg-[#0a0e1a] overflow-hidden">
       <Toolbar />
-      {/* 核心叙事摘要 */}
-      <NarrativeBar combo={combo} lastUpdate={lastUpdate} />
-      {/* 本周Upcoming事件 */}
-      <UpcomingCalendar events={events} />
 
-      <div className="flex-1 flex overflow-hidden">
+      {/* 桌面端：叙事栏 + 焦点事件 */}
+      <div className="hidden lg:block">
+        <NarrativeBar combo={combo} lastUpdate={lastUpdate} />
+        <UpcomingCalendar events={events} />
+      </div>
+
+      {/* 桌面端布局 */}
+      <div className="hidden lg:flex flex-1 overflow-hidden">
         {/* 左侧：图表区域 */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 p-2 pb-0 min-h-0">
@@ -176,6 +249,48 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      {/* 移动端布局 */}
+      <div className="lg:hidden flex-1 flex flex-col min-h-0 pb-[56px]">
+        {/* 移动端叙事摘要（精简） */}
+        {combo && (
+          <div className="px-3 py-1.5 border-b border-[#1e293b] bg-[#0a0e1a] flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <span className={`text-[10px] font-bold shrink-0 ${combo.combinedDirection === "bullish" ? "text-[#22c55e]" : combo.combinedDirection === "bearish" ? "text-[#ef4444]" : "text-[#94a3b8]"}`}>
+              {combo.combinedDirection === "bullish" ? "▲ 偏多" : combo.combinedDirection === "bearish" ? "▼ 偏空" : "◆ 中性"}
+            </span>
+            <span className="text-[10px] text-[#475569] shrink-0">
+              置信度 {combo.overallConfidence.toFixed(0)}%
+            </span>
+            <span className="text-[10px] text-[#475569] shrink-0">
+              {combo.enabledCount}/{combo.totalCount} 因子
+            </span>
+          </div>
+        )}
+
+        {/* 焦点事件（精简单行） */}
+        <UpcomingCalendar events={events} />
+
+        {/* 图表区域 */}
+        <div className="flex-1 min-h-0">
+          <div className="h-full overflow-hidden">
+            <ErrorBoundary>
+              <ChartWidget />
+            </ErrorBoundary>
+          </div>
+        </div>
+      </div>
+
+      {/* 移动端底部导航 */}
+      <MobileNav active={mobileTab} onChange={handleMobileTabChange} />
+
+      {/* 移动端底部 Sheet */}
+      <MobileSheet
+        open={sheetOpen}
+        onClose={handleSheetClose}
+        title={sheetTitle}
+      >
+        {sheetContent}
+      </MobileSheet>
     </div>
   );
 }

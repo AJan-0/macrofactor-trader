@@ -602,7 +602,7 @@ export default function ChartWidget() {
   }, [symbol, timeframe]);
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-[400px] relative" style={{ background: THEME.bg }}>
+    <div ref={containerRef} className="w-full h-full min-h-[200px] lg:min-h-[400px] relative" style={{ background: THEME.bg }}>
       {/* 骨架屏 Loading Overlay */}
       {isLoading && (
         <div className="absolute inset-0 z-10 flex flex-col gap-2 p-4 pointer-events-none">
