@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
 import { useAppStore, type MacroEvent } from "@/store/appStore";
-import { fetchKlines } from "@/services/cryptoCompare";
+import { useKlineData } from "@/hooks/useKlineData";
 import { useKlineStream } from "@/services/klineStream";
 import { fetchRealMacroEvents } from "@/services/macroApi";
 import { MOCK_NEWS } from "@/data/mockNews";
@@ -87,7 +87,7 @@ export default function ChartWidget() {
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const highlightRef = useRef<ISeriesApi<"Histogram"> | null>(null);
-  const klinesRef = useRef<KlineData[]>([]);
+  const { klinesRef, dataVersion } = useKlineData(symbol, timeframe);
 
   // 策略图层管理
   const strategyLineRefs = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
@@ -467,9 +467,15 @@ export default function ChartWidget() {
     };
   }, []);
 
-  // ── 数据加载与渲染（symbol/timeframe 变化时触发）──
+  // ── 数据加载与渲染（symbol/timeframe 变化时触发）v0.4.0 ──
+  // K 线已由 useKlineData Hook 预加载，此处负责因子加载 + 图表渲染
   useEffect(() => {
+    // 等待 useKlineData 的 REST 请求完成（dataVersion > 0 表示 K 线已就绪）
+    if (dataVersion === 0) return;
     if (!chartRef.current || !candleRef.current || !volumeRef.current || !containerRef.current) return;
+
+    // 清除因子缓存（确保切换 symbol 时重新加载对应因子）
+    _factorCache = null;
 
     const chart = chartRef.current;
     const candleSeries = candleRef.current;
@@ -496,26 +502,23 @@ export default function ChartWidget() {
       barSpacing: timeframe === "1D" ? 12 : timeframe === "4H" ? 8 : 6,
     });
 
-    // 4. 并行加载 K线 + 因子
-    console.log(`[ChartWidget] Loading ${symbol} ${timeframe}`);
-    const start = performance.now();
-    const abortCtrl = new AbortController();
+    // 4. 读取 useKlineData 预加载的 K 线 + 异步加载因子
+    const klines = klinesRef.current;
+    if (!klines.length) {
+      // K 线尚未加载完成（切换 symbol 时瞬间清空），保持骨架屏等待 dataVersion 重触发
+      return;
+    }
 
-    Promise.all([
-      fetchKlines(symbol as any, timeframe, undefined, abortCtrl.signal),
-      loadFactorData(),
-    ]).then(([klines, factors]) => {
+    console.log(`[ChartWidget] Loading factors for ${symbol} ${timeframe}`);
+    const start = performance.now();
+
+    loadFactorData().then((factors) => {
       const elapsed = (performance.now() - start).toFixed(0);
       console.log(`[ChartWidget] Loaded ${klines.length} klines + ${factors.length} factors in ${elapsed}ms`);
 
       (container as any).__klines = klines;
       (container as any).__events = factors;
 
-      if (!klines.length) {
-        setError("No data available.");
-        setLoading(false);
-        return;
-      }
       setError(null);
 
       const t = THEME;
@@ -541,8 +544,6 @@ export default function ChartWidget() {
         setStrategyOutputs(new Map());
       }
 
-      klinesRef.current = klines;
-
       requestAnimationFrame(() => {
         chart.timeScale().fitContent();
         skipNextZoomRef.current = true;
@@ -550,14 +551,13 @@ export default function ChartWidget() {
       setChartReady(true);
       setLoading(false);
     }).catch(err => {
-      console.error("[Chart] Load failed:", err);
+      console.error("[ChartWidget] Load failed:", err);
       setError("Failed to load data: " + (err.message || ""));
       setLoading(false);
     });
 
-    // cleanup: 只清理策略线条，不销毁 chart，取消飞行中请求
+    // cleanup: 只清理策略线条，不销毁 chart
     return () => {
-      abortCtrl.abort();
       for (const [, series] of strategyLineRefs.current) {
         try { chart.removeSeries(series); } catch {}
       }
@@ -566,7 +566,7 @@ export default function ChartWidget() {
       setChartReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe]);
+  }, [dataVersion, symbol, timeframe]);
 
   // 用ref保存strategyOutputs供tooltip使用
   const strategyOutputsRef = useRef(strategyOutputs);

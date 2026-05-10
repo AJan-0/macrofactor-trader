@@ -3,6 +3,8 @@ import { useAppStore } from "@/store/appStore";
 import { useI18n } from "@/i18n/context";
 import { useRealtimePrice } from "@/services/priceStream";
 import { useIsMobile } from "@/hooks/use-mobile";
+import AlertManager, { AlertBell, openAlertManager } from "@/components/AlertManager";
+import { fetchAlerts } from "@/services/alertApi";
 
 export default function Toolbar() {
   const { t, locale, setLocale } = useI18n();
@@ -18,6 +20,15 @@ export default function Toolbar() {
   const isUp = (changePct ?? 0) >= 0;
   const lastUpdate = price ? new Date().toLocaleTimeString() : "";
   const isMobile = useIsMobile();
+  const [alertCount, setAlertCount] = useState(0);
+
+  // 定期更新预警数量
+  useEffect(() => {
+    const update = () => fetchAlerts().then(a => setAlertCount(a.filter(x => x.enabled).length)).catch(() => {});
+    update();
+    const iv = setInterval(update, 60_000);
+    return () => clearInterval(iv);
+  }, []);
 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -34,7 +45,8 @@ export default function Toolbar() {
   const changeDisplay = changePct !== null ? `${isUp ? '+' : ''}${changePct.toFixed(2)}%` : '';
 
   return (
-    <div
+    <>
+      <div
       className="flex items-center border-b border-[#1e293b] bg-[#0a0e1a]"
       style={{ height: 48, color: '#e2e8f0', fontSize: 12, flexShrink: 0 }}
     >
@@ -209,10 +221,13 @@ export default function Toolbar() {
               <span className="text-[#22c55e] font-semibold text-[11px]">{t("toolbar.live")}</span>
             </span>
             {lastUpdate && <span className="font-mono text-[10px]">{t("toolbar.lastUpdate")} {lastUpdate}</span>}
+            <AlertBell onClick={openAlertManager} activeCount={alertCount} />
           </div>
         </div>
       )}
     </div>
+    <AlertManager />
+    </>
   );
 }
 
