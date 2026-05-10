@@ -1,0 +1,19 @@
+# MacroFactor Trader API
+# Python 3.11+
+
+# Web framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# HTTP client (async)
+httpx==0.28.1
+
+# Data validation
+pydantic==2.11.6
+
+# Database ORM (async)
+sqlalchemy[asyncio]==2.0.40
+aiosqlite==0.21.0
+
+# Background task scheduler
+apscheduler==3.11.0

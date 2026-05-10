@@ -1,0 +1,610 @@
+[
+  {
+    "factor_id": "fed-2022-03-16",
+    "title": "FED \u52a0\u606f +25bp \u2192 0.50%",
+    "date": "2022-03-16",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2022-05-04",
+    "title": "FED \u52a0\u606f +50bp \u2192 1.00%",
+    "date": "2022-05-04",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2022-06-15",
+    "title": "FED \u52a0\u606f +75bp \u2192 1.75%",
+    "date": "2022-06-15",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2022-07-27",
+    "title": "FED \u52a0\u606f +75bp \u2192 2.50%",
+    "date": "2022-07-27",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2022-09-21",
+    "title": "FED \u52a0\u606f +75bp \u2192 3.25%",
+    "date": "2022-09-21",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2022-11-02",
+    "title": "FED \u52a0\u606f +75bp \u2192 4.00%",
+    "date": "2022-11-02",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2022-12-14",
+    "title": "FED \u52a0\u606f +50bp \u2192 4.50%",
+    "date": "2022-12-14",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-02-01",
+    "title": "FED \u52a0\u606f +25bp \u2192 4.75%",
+    "date": "2023-02-01",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-03-22",
+    "title": "FED \u52a0\u606f +25bp \u2192 5.00%",
+    "date": "2023-03-22",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-05-03",
+    "title": "FED \u52a0\u606f +25bp \u2192 5.25%",
+    "date": "2023-05-03",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-06-14",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.25%",
+    "date": "2023-06-14",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-07-26",
+    "title": "FED \u52a0\u606f +25bp \u2192 5.50%",
+    "date": "2023-07-26",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-09-20",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2023-09-20",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-11-01",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2023-11-01",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2023-12-13",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2023-12-13",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2024-01-31",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2024-01-31",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2024-03-20",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2024-03-20",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2024-05-01",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2024-05-01",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "fed-2024-06-12",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2024-06-12",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bearish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": -2.18,
+      "3d": -3.0,
+      "7d": -4.81,
+      "30d": -15.15
+    }
+  },
+  {
+    "factor_id": "fed-2024-07-31",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 5.50%",
+    "date": "2024-07-31",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bullish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": 1.14,
+      "3d": -6.1,
+      "7d": -14.84,
+      "30d": -8.51
+    }
+  },
+  {
+    "factor_id": "fed-2024-09-18",
+    "title": "FED \u964d\u606f -50bp \u2192 5.00%",
+    "date": "2024-09-18",
+    "category": "Macro",
+    "impact_level": "high",
+    "engine_prediction": "bullish",
+    "actual_1d": "bullish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": 2.09,
+      "3d": 2.83,
+      "7d": 2.42,
+      "30d": 10.98
+    }
+  },
+  {
+    "factor_id": "fed-2024-11-07",
+    "title": "FED \u964d\u606f -25bp \u2192 4.75%",
+    "date": "2024-11-07",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bullish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": 0.84,
+      "3d": 6.02,
+      "7d": 14.95,
+      "30d": 31.64
+    }
+  },
+  {
+    "factor_id": "fed-2024-12-18",
+    "title": "FED \u964d\u606f -25bp \u2192 4.50%",
+    "date": "2024-12-18",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bearish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": -2.55,
+      "3d": -2.82,
+      "7d": -0.74,
+      "30d": 4.42
+    }
+  },
+  {
+    "factor_id": "fed-2025-01-29",
+    "title": "FED \u964d\u606f -25bp \u2192 4.25%",
+    "date": "2025-01-29",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bullish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": 1.0,
+      "3d": -2.94,
+      "7d": -6.83,
+      "30d": -18.64
+    }
+  },
+  {
+    "factor_id": "fed-2025-03-19",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 4.25%",
+    "date": "2025-03-19",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bearish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": -3.09,
+      "3d": -3.48,
+      "7d": 0.05,
+      "30d": -2.77
+    }
+  },
+  {
+    "factor_id": "fed-2025-05-07",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 4.25%",
+    "date": "2025-05-07",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bullish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": 6.4,
+      "3d": 7.9,
+      "7d": 6.71,
+      "30d": 7.58
+    }
+  },
+  {
+    "factor_id": "fed-2025-06-18",
+    "title": "FED \u964d\u606f -25bp \u2192 4.00%",
+    "date": "2025-06-18",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bearish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": -0.19,
+      "3d": -2.5,
+      "7d": 2.36,
+      "30d": 12.51
+    }
+  },
+  {
+    "factor_id": "fed-2025-07-30",
+    "title": "FED \u964d\u606f -25bp \u2192 3.75%",
+    "date": "2025-07-30",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bearish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": -1.76,
+      "3d": -4.5,
+      "7d": -2.38,
+      "30d": -7.99
+    }
+  },
+  {
+    "factor_id": "fed-2025-09-17",
+    "title": "FED \u964d\u606f -25bp \u2192 3.50%",
+    "date": "2025-09-17",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bullish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": 0.57,
+      "3d": -0.64,
+      "7d": -2.7,
+      "30d": -8.59
+    }
+  },
+  {
+    "factor_id": "fed-2025-10-29",
+    "title": "FED \u964d\u606f -25bp \u2192 3.25%",
+    "date": "2025-10-29",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bullish",
+    "actual_1d": "bearish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": -1.59,
+      "3d": 0.01,
+      "7d": -5.6,
+      "30d": -17.39
+    }
+  },
+  {
+    "factor_id": "fed-2025-12-10",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 3.25%",
+    "date": "2025-12-10",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bullish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": 0.53,
+      "3d": -1.87,
+      "7d": -6.39,
+      "30d": -1.64
+    }
+  },
+  {
+    "factor_id": "fed-2026-01-28",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 3.25%",
+    "date": "2026-01-28",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bearish",
+    "actual_7d": "bearish",
+    "returns": {
+      "1d": -5.18,
+      "3d": -11.84,
+      "7d": -18.13,
+      "30d": -26.13
+    }
+  },
+  {
+    "factor_id": "fed-2026-03-18",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 3.25%",
+    "date": "2026-03-18",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bearish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": -1.87,
+      "3d": -3.56,
+      "7d": 0.09,
+      "30d": 8.25
+    }
+  },
+  {
+    "factor_id": "fed-2026-04-29",
+    "title": "FED \u7ef4\u6301 +0bp \u2192 3.25%",
+    "date": "2026-04-29",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "neutral",
+    "actual_1d": "bullish",
+    "actual_7d": "bullish",
+    "returns": {
+      "1d": 0.7,
+      "3d": 3.8,
+      "7d": 7.46,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "ukraine-2022",
+    "title": "Russia-Ukraine War Begins",
+    "date": "2022-02-24",
+    "category": "GeoPolitics",
+    "impact_level": "high",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "grayscale-2023",
+    "title": "Grayscale Wins SEC Lawsuit",
+    "date": "2023-08-29",
+    "category": "CryptoNative",
+    "impact_level": "high",
+    "engine_prediction": "bullish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "btc-etf-2024",
+    "title": "Spot Bitcoin ETFs Approved",
+    "date": "2024-01-10",
+    "category": "CryptoNative",
+    "impact_level": "high",
+    "engine_prediction": "bullish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  },
+  {
+    "factor_id": "nfp-2024",
+    "title": "NFP Surprises to 303K",
+    "date": "2024-04-05",
+    "category": "Macro",
+    "impact_level": "medium",
+    "engine_prediction": "bearish",
+    "actual_1d": null,
+    "actual_7d": null,
+    "returns": {
+      "1d": null,
+      "3d": null,
+      "7d": null,
+      "30d": null
+    }
+  }
+]
