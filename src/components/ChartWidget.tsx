@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
 import { useAppStore, type MacroEvent } from "@/store/appStore";
-import { fetchKlines, fetchRealtimePrice, getTimeframeIntervalSeconds } from "@/services/cryptoCompare";
+import { fetchKlines } from "@/services/cryptoCompare";
+import { useKlineStream } from "@/services/klineStream";
 import { fetchRealMacroEvents } from "@/services/macroApi";
 import { MOCK_NEWS } from "@/data/mockNews";
 import { strategyRegistry } from "@/strategies";
@@ -571,50 +572,49 @@ export default function ChartWidget() {
   const strategyOutputsRef = useRef(strategyOutputs);
   strategyOutputsRef.current = strategyOutputs;
 
-  // ── 实时更新定时器 ──
-  // 使用实时价格更新最后一根 K线的 close，而非请求历史 API（有延迟）
+  // ── OKX WebSocket 实时 K 线更新 (v0.4.0) ──
+  // 替代原 30s 轮询 fetchRealtimePrice，直接从 OKX WS 接收增量 candle 推送
+  const { isConnected: wsConnected, lastCandle } = useKlineStream(symbol, timeframe);
+
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (!candleRef.current || !volumeRef.current) return;
-      try {
-        const priceData = await fetchRealtimePrice(symbol);
-        const lastKline = klinesRef.current.at(-1);
-        if (!lastKline) return;
+    if (wsConnected) {
+      console.log(`[ChartWidget] KlineWS connected (${symbol} ${timeframe})`);
+    }
+  }, [wsConnected, symbol, timeframe]);
 
-        const intervalSec = getTimeframeIntervalSeconds(timeframe);
-        const nowSec = Math.floor(Date.now() / 1000);
-        const currentBarTime = Math.floor(nowSec / intervalSec) * intervalSec;
+  // 将实时 candle 增量更新到图表 + klinesRef
+  useEffect(() => {
+    if (!lastCandle || !candleRef.current || !volumeRef.current) return;
 
-        if (currentBarTime > lastKline.time) {
-          // 新 bar 开始：以当前价格作为 open/high/low/close，volume 为 0
-          const newBar = {
-            time: currentBarTime,
-            open: priceData.price,
-            high: priceData.price,
-            low: priceData.price,
-            close: priceData.price,
-            volume: 0,
-          };
-          candleRef.current.update({ time: newBar.time as Time, open: newBar.open, high: newBar.high, low: newBar.low, close: newBar.close });
-          volumeRef.current.update({ time: newBar.time as Time, value: 0, color: `${THEME.up}30` });
-          klinesRef.current.push(newBar);
-        } else {
-          // 更新当前 bar 的 close、high、low
-          const updated = { ...lastKline };
-          updated.close = priceData.price;
-          updated.high = Math.max(updated.high, priceData.price);
-          updated.low = Math.min(updated.low, priceData.price);
-          // volume 无法从实时价格获取，保持原值或轻微递增
-          updated.volume = lastKline.volume;
-          candleRef.current.update({ time: updated.time as Time, open: updated.open, high: updated.high, low: updated.low, close: updated.close });
-          volumeRef.current.update({ time: updated.time as Time, value: updated.volume, color: updated.close >= updated.open ? `${THEME.up}30` : `${THEME.down}30` });
-          klinesRef.current[klinesRef.current.length - 1] = updated;
-        }
-      } catch (e) {}
-    }, 30000);
+    const lastKline = klinesRef.current.at(-1);
 
-    return () => clearInterval(interval);
-  }, [symbol, timeframe]);
+    if (!lastKline || lastCandle.time > lastKline.time) {
+      // 新 bar: 追加
+      const newBar = {
+        time: lastCandle.time,
+        open: lastCandle.open,
+        high: lastCandle.high,
+        low: lastCandle.low,
+        close: lastCandle.close,
+        volume: lastCandle.volume,
+      };
+      candleRef.current.update({ time: newBar.time as Time, open: newBar.open, high: newBar.high, low: newBar.low, close: newBar.close });
+      volumeRef.current.update({ time: newBar.time as Time, value: newBar.volume, color: `${THEME.up}30` });
+      klinesRef.current.push(newBar);
+    } else if (lastCandle.time === lastKline.time) {
+      // 同一 bar: 更新 OHLCV
+      const updated = { ...lastKline };
+      updated.open = lastCandle.open;
+      updated.high = Math.max(updated.high, lastCandle.high);
+      updated.low = Math.min(updated.low, lastCandle.low);
+      updated.close = lastCandle.close;
+      updated.volume = Math.max(updated.volume, lastCandle.volume);
+
+      candleRef.current.update({ time: updated.time as Time, open: updated.open, high: updated.high, low: updated.low, close: updated.close });
+      volumeRef.current.update({ time: updated.time as Time, value: updated.volume, color: updated.close >= updated.open ? `${THEME.up}30` : `${THEME.down}30` });
+      klinesRef.current[klinesRef.current.length - 1] = updated;
+    }
+  }, [lastCandle]);
 
   return (
     <div ref={containerRef} className="w-full h-full min-h-[200px] lg:min-h-[400px] relative" style={{ background: THEME.bg }}>

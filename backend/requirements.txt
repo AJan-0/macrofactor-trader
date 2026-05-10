@@ -8,6 +8,9 @@ uvicorn[standard]==0.34.2
 # HTTP client (async)
 httpx==0.28.1
 
+# WebSocket client (OKX real-time candle streaming)
+websockets==15.0.1
+
 # Data validation
 pydantic==2.11.6
 

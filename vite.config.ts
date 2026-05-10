@@ -8,6 +8,19 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    proxy: {
+      // REST API proxy
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      // WebSocket proxy for real-time K-line
+      '/ws': {
+        target: 'ws://localhost:8000',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
   },
   resolve: {
     alias: {

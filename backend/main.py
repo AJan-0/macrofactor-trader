@@ -1,9 +1,9 @@
 """
 main.py
-FastAPI 应用入口与路由定义 —— v0.3.0 加入 K 线缓存加速层。
+FastAPI 应用入口与路由定义 —— v0.4.0 加入 OKX WebSocket 实时 K 线推送。
 
 启动方式:
-    cd /mnt/agents/output/app/backend
+    cd backend
     uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 环境变量:
@@ -12,14 +12,19 @@ FastAPI 应用入口与路由定义 —— v0.3.0 加入 K 线缓存加速层。
 
 Swagger UI:
     http://localhost:8000/docs
+
+WebSocket 实时 K 线:
+    ws://localhost:8000/ws/klines
 """
 
+import asyncio
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +50,10 @@ from services.cache_config import cache_settings
 from database import init_db, close_db, get_db
 from services.sync_service import sync_all, query_events_from_db
 
+# v0.4.0 新增: OKX WebSocket 实时 K 线推送
+from services.okx_ws import OKXWebSocketClient
+from services.kline_broadcaster import KlineBroadcaster
+
 # ──────────────────────────────
 # 日志配置
 # ──────────────────────────────
@@ -62,6 +71,11 @@ logger = logging.getLogger(__name__)
 # 缓存实例（lifespan 中初始化，路由中读取）
 _cache: ICacheBackend | None = None
 
+# v0.4.0 新增: 实时 K 线广播
+_broadcaster: KlineBroadcaster | None = None
+_okx_ws: OKXWebSocketClient | None = None
+_okx_ws_task: asyncio.Task | None = None
+
 
 # ──────────────────────────────
 # 生命周期管理
@@ -76,16 +90,19 @@ async def lifespan(app: FastAPI):
         2. 初始化缓存后端（Memory 或 Redis）。
         3. 注入缓存到 OKX 客户端。
         4. 执行首次数据同步（FRED + 静态事件）。
+        5. [v0.4.0] 启动 OKX WebSocket 实时 K 线推送。
     shutdown:
-        1. 关闭数据库连接池。
-        2. 关闭缓存连接。
+        1. 停止 OKX WebSocket 连接。
+        2. 关闭数据库连接池。
+        3. 关闭缓存连接。
     """
-    global _cache
+    global _cache, _broadcaster, _okx_ws, _okx_ws_task
 
     logger.info("=" * 50)
-    logger.info("MacroFactor Trader API starting up (v0.3.0)")
+    logger.info("MacroFactor Trader API starting up (v0.4.0)")
     logger.info("Cache backend: %s", cache_settings.backend)
     logger.info("Swagger UI: http://localhost:8000/docs")
+    logger.info("Kline WS:   ws://localhost:8000/ws/klines")
     logger.info("=" * 50)
 
     # ── 1. 数据库初始化 ──
@@ -105,8 +122,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Cache init failed (%s), running without cache", exc)
         _cache = None
 
-    # ── 2.5 缓存预热 (v0.3.1 新增) ──
-    # 预加载热点K线, 优化启动后首批请求性能
+    # ── 2.5 缓存预热 ──
     try:
         from services.cache_warmup import warmup_cache_with_timeout
         warmup_result = await warmup_cache_with_timeout(_cache, timeout_seconds=10.0)
@@ -131,12 +147,34 @@ async def lifespan(app: FastAPI):
         )
     except Exception as exc:
         logger.error("Initial sync failed: %s", exc)
-        # 同步失败不阻断启动
+
+    # ── 4. [v0.4.0] OKX WebSocket 实时 K 线推送 ──
+    try:
+        _broadcaster = KlineBroadcaster()
+        _okx_ws = OKXWebSocketClient(on_candle_update=_broadcaster.broadcast_candle)
+        _okx_ws_task = asyncio.create_task(_okx_ws.start())
+        logger.info("OKX WebSocket task started")
+    except Exception as exc:
+        logger.warning("OKX WebSocket init failed (non-fatal): %s", exc)
+        _broadcaster = None
+        _okx_ws = None
 
     yield
 
     # ── Shutdown ──
     logger.info("MacroFactor Trader API shutting down")
+
+    # Stop OKX WebSocket
+    if _okx_ws is not None:
+        await _okx_ws.stop()
+        logger.info("OKX WebSocket stopped")
+    if _okx_ws_task is not None:
+        _okx_ws_task.cancel()
+        try:
+            await _okx_ws_task
+        except asyncio.CancelledError:
+            pass
+
     if _cache is not None:
         await _cache.close()
         logger.info("Cache backend closed")
@@ -150,8 +188,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MacroFactor Trader API",
-    description="宏观因子与资产价格可视化面板 — 后端服务 (v0.3.0 缓存加速)",
-    version="0.3.0",
+    description="宏观因子与资产价格可视化面板 — 后端服务 (v0.4.0 实时K线推送)",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -162,7 +200,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Cache-Status", "X-Cache-Stale"],  # 暴露缓存状态头给前端
+    expose_headers=["X-Cache-Status", "X-Cache-Stale"],
 )
 
 
@@ -172,22 +210,120 @@ app.add_middleware(
 
 @app.get("/health", tags=["System"])
 async def health_check() -> dict[str, Any]:
-    """健康检查端点 —— 包含缓存状态。"""
-    cache_info = {
+    """健康检查端点 —— 包含缓存和 WebSocket 状态。"""
+    cache_info: dict[str, Any] = {
         "backend": cache_settings.backend,
         "enabled": _cache is not None,
     }
-    # 尝试获取缓存统计
     if hasattr(_cache, "_store"):
         cache_info["memory_keys"] = len(_cache._store)  # type: ignore[union-attr]
+
+    ws_info: dict[str, Any] = {
+        "okx_connected": _okx_ws.is_connected() if _okx_ws else False,
+        "okx_subscriptions": list(_okx_ws._subscriptions) if _okx_ws else [],
+        "connected_clients": len(_broadcaster._clients) if _broadcaster else 0,
+    }
 
     return {
         "status": "ok",
         "service": "macrofactor-trader-api",
-        "version": "0.3.0",
-        "features": ["klines", "events", "db_persistence", "cache_layer"],
+        "version": "0.4.0",
+        "features": ["klines", "events", "db_persistence", "cache_layer", "realtime_ws"],
         "cache": cache_info,
+        "websocket": ws_info,
     }
+
+
+# ──────────────────────────────
+# WebSocket 实时 K 线推送 (v0.4.0)
+# ──────────────────────────────
+
+@app.websocket("/ws/klines")
+async def ws_klines(websocket: WebSocket) -> None:
+    """WebSocket 端点: 实时 K 线数据推送。
+
+    协议:
+        客户端 → 服务端:
+            {"type": "subscribe", "subscriptions": [
+                {"symbol": "BTC-USDT", "timeframe": "1H"},
+                {"symbol": "ETH-USDT", "timeframe": "15m"}
+            ]}
+
+            {"type": "unsubscribe", "subscriptions": [...]}
+
+        服务端 → 客户端:
+            {"type": "candle", "symbol": "BTC-USDT", "timeframe": "1H", "candle": {
+                "time": 1716000000,
+                "open": 65000.5,
+                "high": 65100.0,
+                "low": 64900.0,
+                "close": 65050.0,
+                "volume": 123.45,
+                "confirm": false,
+                "is_new": true,
+                "symbol": "BTC-USDT",
+                "timeframe": "1H"
+            }}
+
+            {"type": "error", "message": "..."}
+    """
+    if _broadcaster is None or _okx_ws is None:
+        await websocket.close(code=1013, reason="Real-time K-line service not available")
+        return
+
+    # Accept connection
+    client_id = await _broadcaster.connect(websocket)
+    logger.info("WS client connected, id=%s", client_id)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await _broadcaster.send_error(websocket, "Invalid JSON")
+                continue
+
+            msg_type = msg.get("type", "")
+
+            if msg_type == "subscribe":
+                subs = msg.get("subscriptions", [])
+                if not isinstance(subs, list):
+                    await _broadcaster.send_error(websocket, "subscriptions must be an array")
+                    continue
+                await _broadcaster.update_subscriptions(websocket, subs)
+                for sub in subs:
+                    symbol = sub.get("symbol")
+                    timeframe = sub.get("timeframe")
+                    if symbol and timeframe:
+                        await _okx_ws.subscribe(symbol, timeframe)
+                logger.info("WS client %s subscribed to %d topics", client_id, len(subs))
+
+            elif msg_type == "unsubscribe":
+                subs = msg.get("subscriptions", [])
+                for sub in subs:
+                    symbol = sub.get("symbol")
+                    timeframe = sub.get("timeframe")
+                    if symbol and timeframe:
+                        await _okx_ws.unsubscribe(symbol, timeframe)
+                # Remove from client subscriptions
+                await _broadcaster.update_subscriptions(websocket, [])
+                logger.info("WS client %s unsubscribed", client_id)
+
+            elif msg_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+
+            else:
+                await _broadcaster.send_error(
+                    websocket,
+                    f"Unknown message type: {msg_type}. Use 'subscribe' or 'unsubscribe'.",
+                )
+
+    except WebSocketDisconnect:
+        logger.info("WS client %s disconnected", client_id)
+    except Exception as exc:
+        logger.warning("WS client %s error: %s", client_id, exc)
+    finally:
+        await _broadcaster.disconnect(websocket)
 
 
 # ──────────────────────────────
@@ -222,14 +358,7 @@ async def fetch_klines(
         description="强制跳过缓存，直接请求 OKX（用于刷新数据）",
     ),
 ) -> KlinesResponse:
-    """获取 OKX 加密货币 K 线（带缓存加速 + 降级机制）。
-
-    流程:
-        1. 检查缓存，命中则直接返回（~1ms）。
-        2. 缓存未命中 → 请求 OKX API（~500ms）→ 写入缓存。
-        3. OKX 故障 → 返回旧缓存数据（stale fallback）。
-        4. 响应头 X-Cache-Status 指示数据来源: HIT / MISS / STALE。
-    """
+    """获取 OKX 加密货币 K 线（带缓存加速 + 降级机制）。"""
     t0 = time.perf_counter()
 
     try:
@@ -240,30 +369,19 @@ async def fetch_klines(
         )
     except OKXRequestError as exc:
         logger.error("Network layer error: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"OKX network error: {exc}",
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"OKX network error: {exc}") from exc
     except OKXAPIError as exc:
         logger.error("Business layer error: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail=f"OKX API error [{exc.code}]: {exc.msg}",
-        ) from exc
+        raise HTTPException(status_code=503, detail=f"OKX API error [{exc.code}]: {exc.msg}") from exc
     except OKXClientError as exc:
         logger.error("Client error: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error: {exc}",
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
 
-    # 响应头 —— 缓存状态
     cache_source = meta.get("source", "okx")
     response.headers["X-Cache-Status"] = "HIT" if meta.get("cached") else "MISS"
     response.headers["X-Cache-Stale"] = "true" if meta.get("stale") else "false"
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
-
     source_label = {
         "cache": "Cache",
         "cache_stale": "Cache(stale fallback)",
@@ -295,23 +413,11 @@ async def fetch_klines(
     response_model=MacroEventsResponse,
     tags=["Macro Events"],
     summary="获取宏观经济事件列表（数据库驱动）",
-    description="从 SQLite 数据库查询事件（FRED 利率数据 + 静态黑天鹅/地缘/加密事件），按时间戳升序返回。",
 )
 async def fetch_macro_events(
-    category: EventCategory | None = Query(
-        default=None,
-        description="按分类过滤：Macro / GeoPolitics / CryptoNative",
-    ),
-    impact: ImpactLevel | None = Query(
-        default=None,
-        description="按影响级别过滤：high / medium / low",
-    ),
-    limit: int = Query(
-        default=100,
-        ge=1,
-        le=200,
-        description="返回条数上限",
-    ),
+    category: EventCategory | None = Query(default=None),
+    impact: ImpactLevel | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ) -> MacroEventsResponse:
     """获取宏观事件列表（数据库驱动查询）。"""
@@ -346,24 +452,21 @@ async def fetch_macro_events(
     "/api/cache/clear",
     tags=["Admin"],
     summary="清除 K 线缓存",
-    description="手动清除指定交易对/粒度的 K 线缓存。不传参数则清除全部。",
 )
 async def clear_cache(
-    symbol: str | None = Query(default=None, description="交易对，如 BTC-USDT"),
-    timeframe: str | None = Query(default=None, description="粒度，如 1D"),
+    symbol: str | None = Query(default=None),
+    timeframe: str | None = Query(default=None),
 ) -> dict[str, Any]:
     """手动清除缓存。"""
     if _cache is None:
         return {"cleared": False, "reason": "cache not initialized"}
 
     cleared = 0
-    # 简化实现：如果指定了 key 则删除该 key，否则无法批量删除（两种后端不同）
     if symbol and timeframe:
         key = cache_settings.build_key(inst_id=symbol, bar=timeframe, limit=100)
         await _cache.delete(key)
         cleared += 1
     elif hasattr(_cache, "_store"):
-        # MemoryCache: 清除所有 klines:* 前缀的键
         keys_to_del = [k for k in _cache._store.keys() if k.startswith("klines:")]  # type: ignore[union-attr]
         for k in keys_to_del:
             await _cache.delete(k)
@@ -380,7 +483,6 @@ async def clear_cache(
     "/api/sync",
     tags=["Admin"],
     summary="手动触发数据同步",
-    description="重新从 FRED API 和静态源同步数据到数据库。仅插入新记录，不会重复。",
 )
 async def trigger_sync() -> dict[str, Any]:
     """手动触发全量数据同步。"""
@@ -395,10 +497,7 @@ async def trigger_sync() -> dict[str, Any]:
         }
     except Exception as exc:
         logger.error("Manual sync failed: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Sync failed: {exc}",
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
 
 
 # ──────────────────────────────
