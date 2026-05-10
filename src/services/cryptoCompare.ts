@@ -36,7 +36,7 @@ const TIMEFRAME_MAP: Record<Timeframe, { endpoint: string; aggregate: number; ba
   "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 1 },
   "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 2 },
   "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 3 },
-  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 30 },
+  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 7 },
   "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 90 },
   "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365 * 2 },
   "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3 },

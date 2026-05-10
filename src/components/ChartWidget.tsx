@@ -342,10 +342,14 @@ export default function ChartWidget() {
         }
       }
 
-      // 3. 无条件清理所有旧策略线条（防止 symbol/timeframe 切换时残留）
-      for (const [lineId, series] of strategyLineRefs.current) {
-        try { chart.removeSeries(series); } catch {}
-        strategyLineRefs.current.delete(lineId);
+      // 3. 清理旧策略线条（timeframe 切换的清理由 symbol/timeframe effect 负责）
+      const linesToRemove = Array.from(strategyLineRefs.current.entries());
+      for (const [lineId, series] of linesToRemove) {
+        const strategyId = lineId.split('-')[0];
+        if (!activeStrategies.some(s => s.id === strategyId)) {
+          try { chart.removeSeries(series); } catch {}
+          strategyLineRefs.current.delete(lineId);
+        }
       }
 
       // 4. 绘制策略线条
@@ -971,7 +975,7 @@ async function calculateStrategies(
         setTimeout(() => {
           worker.removeEventListener("message", handler);
           resolve({ id: as.id, output: null, error: "Worker timeout" });
-        }, 1500);
+        }, 5000);
       })
     );
     const results = await Promise.all(promises);
