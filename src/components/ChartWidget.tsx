@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, lazy, Suspense } from "react";
 import { useAppStore } from "@/store/appStore";
 import { useKlineData } from "@/hooks/useKlineData";
-import { useKlineStream } from "@/services/klineStream";
+import { useKlineStream, mergeCandle } from "@/services/klineStream";
 import { fetchRealMacroEvents } from "@/services/macroApi";
 import type { MacroEvent } from "@/store/appStore";
 import type { StrategySignal } from "@/services/strategyEngine";
@@ -14,11 +14,12 @@ import BacktestPanel from "./BacktestPanel";
 const StrategyConsensusPanel = lazy(() => import("./StrategyConsensusPanel"));
 const PineTranspilerPanel = lazy(() => import("./PineTranspilerPanel"));
 
-let _factorCache: MacroEvent[] | null = null;
+let _factorCache: { data: MacroEvent[]; ts: number } | null = null;
+const FACTOR_CACHE_MS = 300_000; // 5-minute TTL prevents stale data
 
 // @ts-expect-error - will be used in future
 async function loadFactorData(): Promise<MacroEvent[]> {
-  if (_factorCache) return _factorCache;
+  if (_factorCache && Date.now() - _factorCache.ts < FACTOR_CACHE_MS) return _factorCache.data;
   try {
     const [resp, realEvents] = await Promise.all([
       fetch("/data/factors.json"),
@@ -37,7 +38,7 @@ async function loadFactorData(): Promise<MacroEvent[]> {
       }
     }
     merged.sort((a, b) => b.timestamp - a.timestamp);
-    _factorCache = merged;
+    _factorCache = { data: merged, ts: Date.now() };
     console.log(
       `[ChartWidget] Loaded ${merged.length} factors (${realEvents.length} real + ${localData.length} local)`
     );
@@ -61,7 +62,7 @@ export default function ChartWidget() {
 
   const symbol = useAppStore((s) => s.currentSymbol);
   const timeframe = useAppStore((s) => s.currentTimeframe);
-  const { klinesRef, isLoading: klineLoading } = useKlineData(symbol, timeframe);
+  const { klinesRef, dataVersion, isLoading: klineLoading, bumpVersion } = useKlineData(symbol, timeframe);
 
   const [loadedFactors, setLoadedFactors] = useState<MacroEvent[]>([]);
   const [alertToasts, setAlertToasts] = useState<AlertToast[]>([]);
@@ -72,6 +73,17 @@ export default function ChartWidget() {
   const setLoading = useAppStore((s) => s.setLoading);
   const setError = useAppStore((s) => s.setError);
   const selectEvent = useAppStore((s) => s.selectEvent);
+
+  // WebSocket 实时 K 线增量合并
+  const { lastCandle } = useKlineStream(symbol, timeframe);
+
+  useEffect(() => {
+    if (!lastCandle) return;
+    const merged = mergeCandle(klinesRef.current, lastCandle);
+    if (merged === klinesRef.current) return;
+    klinesRef.current = merged;
+    bumpVersion();
+  }, [lastCandle, bumpVersion]);
 
   // Sync store isLoading with kline loading state
   useEffect(() => {
@@ -117,8 +129,6 @@ export default function ChartWidget() {
     }, []),
   });
 
-  // WebSocket real-time updates
-  useKlineStream(symbol, timeframe);
 
   // Handle event click from chart
   const handleEventClick = useCallback(
@@ -148,6 +158,7 @@ export default function ChartWidget() {
         strategyOutputs={strategyOutputs}
         onEventClick={handleEventClick}
         timeframe={timeframe}
+        dataVersion={dataVersion}
       />
 
       {/* Skeleton Loading Overlay */}

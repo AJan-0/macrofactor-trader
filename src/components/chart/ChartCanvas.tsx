@@ -57,6 +57,7 @@ interface ChartCanvasProps {
   strategyOutputs: Map<string, StrategyOutput>;
   onEventClick: (eventId: string, timestamp: number) => void;
   timeframe: string;
+  dataVersion: number;
 }
 
 const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartCanvas({
@@ -65,6 +66,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   strategyOutputs,
   onEventClick,
   timeframe,
+  dataVersion,
 }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -328,7 +330,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     requestAnimationFrame(() => {
       chartRef.current?.timeScale().fitContent();
     });
-  }, [klines, events, timeframe]);
+  }, [klines, events, timeframe, dataVersion]);
 
   // Update highlight on hover
   const hoverTimestamp = useAppStore((s) => s.hoverTimestamp);

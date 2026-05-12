@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { create } from "zustand";
 
 export type AssetSymbol = "BTC-USDT" | "ETH-USDT" | "GC=F";
 export type Timeframe = "1m" | "3m" | "5m" | "15m" | "1H" | "4H" | "1D";
@@ -52,7 +52,7 @@ export interface AppState {
   error: string | null;
 }
 
-export interface AppContextValue extends AppState {
+interface AppActions {
   setSymbol: (s: AssetSymbol) => void;
   setTimeframe: (tf: Timeframe) => void;
   toggleCategory: (cat: EventCategory) => void;
@@ -64,7 +64,7 @@ export interface AppContextValue extends AppState {
   setError: (msg: string | null) => void;
 }
 
-export const INITIAL_APP_STATE: AppState = {
+const INITIAL_APP_STATE: AppState = {
   currentSymbol: "BTC-USDT",
   currentTimeframe: "1D",
   selectedCategories: [],
@@ -77,28 +77,23 @@ export const INITIAL_APP_STATE: AppState = {
   error: null,
 };
 
-export const AppContext = createContext<AppContextValue | null>(null);
-
-export function useAppContext() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error("useAppContext must be used within AppProvider");
-  return ctx;
-}
-
-export const useChartConfig = () => {
-  const ctx = useAppContext();
-  return {
-    symbol: ctx.currentSymbol, timeframe: ctx.currentTimeframe,
-    setSymbol: ctx.setSymbol, setTimeframe: ctx.setTimeframe,
-  };
-};
-
-export const useChartStatus = () => {
-  const ctx = useAppContext();
-  return { isLoading: ctx.isLoading, error: ctx.error };
-};
-
-export const useAppStore = <T,>(selector: (state: AppContextValue) => T): T => {
-  const ctx = useAppContext();
-  return selector(ctx);
-};
+export const useAppStore = create<AppState & AppActions>()((set) => ({
+  ...INITIAL_APP_STATE,
+  setSymbol: (s) => set({ currentSymbol: s, isLoading: true, error: null }),
+  setTimeframe: (tf) => set({ currentTimeframe: tf, isLoading: true, error: null }),
+  toggleCategory: (cat) => set((state) => ({
+    selectedCategories: state.selectedCategories.includes(cat)
+      ? state.selectedCategories.filter((c) => c !== cat)
+      : [...state.selectedCategories, cat],
+  })),
+  toggleImpact: (imp) => set((state) => ({
+    selectedImpacts: state.selectedImpacts.includes(imp)
+      ? state.selectedImpacts.filter((i) => i !== imp)
+      : [...state.selectedImpacts, imp],
+  })),
+  selectEvent: (id, ts) => set({ selectedEventId: id, activeTimestamp: ts }),
+  setHoverTimestamp: (ts) => set({ hoverTimestamp: ts }),
+  setEvents: (ev) => set({ events: ev, isLoading: false }),
+  setLoading: (v) => set({ isLoading: v }),
+  setError: (msg) => set({ error: msg, isLoading: false }),
+}));

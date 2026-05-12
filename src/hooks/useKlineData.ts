@@ -16,7 +16,7 @@
  *   WebSocket candle arrive → (ChartWidget 直接修改 klinesRef.current)
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { fetchKlines, type KlineData } from '@/services/cryptoCompare';
 import type { AssetSymbol, Timeframe } from '@/store/appStore';
 import { getCachedKlines, setCachedKlines } from '@/hooks/useIndexedDB';
@@ -24,12 +24,14 @@ import { getCachedKlines, setCachedKlines } from '@/hooks/useIndexedDB';
 export interface UseKlineDataResult {
   /** K 线数据引用 — 不受 React 状态管理（避免高频 re-render） */
   klinesRef: React.MutableRefObject<KlineData[]>;
-  /** 数据版本号 — REST 请求完成时自增，可用于触发 useEffect */
+  /** 数据版本号 — REST 请求或 WebSocket 增量更新时自增 */
   dataVersion: number;
   /** 初始数据是否正在加载 */
   isLoading: boolean;
   /** 加载错误信息 */
   error: string | null;
+  /** 手动触发版本号自增（WebSocket 增量更新时调用） */
+  bumpVersion: () => void;
 }
 
 /**
@@ -113,5 +115,7 @@ export function useKlineData(
     };
   }, [symbol, timeframe]);
 
-  return { klinesRef, dataVersion, isLoading, error };
+  const bumpVersion = useCallback(() => setDataVersion(v => v + 1), []);
+
+  return { klinesRef, dataVersion, isLoading, error, bumpVersion };
 }
