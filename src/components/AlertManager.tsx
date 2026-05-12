@@ -13,7 +13,6 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useAppStore, type AssetSymbol } from "@/store/appStore";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useAlertStream, type AlertEvent } from "@/hooks/useAlertStream";
 import {
   fetchAlerts, createAlert as apiCreate, updateAlert as apiUpdate, deleteAlert as apiDel,

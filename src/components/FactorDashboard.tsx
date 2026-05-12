@@ -100,7 +100,7 @@ export default function FactorDashboard({
             )}
             {signals.slice(0, 10).map(s => {
               const factorItem = factors.find(f => f.id === s.id);
-              const bt = getFactorBacktest(backtestRecords, s.id);
+              const bt = getFactorBacktest(backtestRecords, s.id, factorItem ?? s);
               const hoverTs = bt?.date ? new Date(bt.date).getTime() / 1000
                 : factorItem?.endDate ? new Date(factorItem.endDate).getTime() / 1000 : undefined;
               return (

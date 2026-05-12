@@ -194,8 +194,8 @@ export default function Dashboard() {
         {backtestSummary ? (
           <div className="space-y-1">
             <div>总样本: {backtestSummary.total}</div>
-            <div>1日准确率: {(backtestSummary.accuracy_1d * 100).toFixed(1)}%</div>
-            <div>7日准确率: {(backtestSummary.accuracy_7d * 100).toFixed(1)}%</div>
+            <div>1日准确率: {backtestSummary.accuracy_1d.toFixed(1)}%</div>
+            <div>7日准确率: {backtestSummary.accuracy_7d.toFixed(1)}%</div>
             <div>1日命中: {backtestSummary.correct_1d}/{backtestSummary.total}</div>
             <div>7日命中: {backtestSummary.correct_7d}/{backtestSummary.total}</div>
           </div>

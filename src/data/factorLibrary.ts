@@ -285,21 +285,47 @@ export function searchFactors(query: string): FactorItem[] {
 // localStorage keys
 const STORAGE_ENABLED = "macrofactor_enabled_ids";
 const STORAGE_WEIGHTS = "macrofactor_weights";
+const STORAGE_PROBABILITIES = "macrofactor_probabilities";
+const STORAGE_DIRECTIONS = "macrofactor_directions";
+const STORAGE_CUSTOM_FACTORS = "macrofactor_custom_factors";
 
 // 加载用户配置
 export function loadUserFactors(): FactorItem[] {
   try {
     const enabledStr = localStorage.getItem(STORAGE_ENABLED);
+    const hasSavedEnabled = enabledStr !== null;
     const enabledIds: Set<string> = enabledStr ? new Set(JSON.parse(enabledStr)) : new Set();
     
     const weightsStr = localStorage.getItem(STORAGE_WEIGHTS);
     const weightsMap: Record<string, number> = weightsStr ? JSON.parse(weightsStr) : {};
 
-    return BUILTIN_LIBRARY.map(f => ({
+    const probabilitiesStr = localStorage.getItem(STORAGE_PROBABILITIES);
+    const probabilitiesMap: Record<string, number> = probabilitiesStr ? JSON.parse(probabilitiesStr) : {};
+
+    const directionsStr = localStorage.getItem(STORAGE_DIRECTIONS);
+    const directionsMap: Record<string, FactorItem["directionOverride"]> = directionsStr ? JSON.parse(directionsStr) : {};
+
+    const customStr = localStorage.getItem(STORAGE_CUSTOM_FACTORS);
+    const customFactors: FactorItem[] = customStr ? JSON.parse(customStr) : [];
+
+    const builtins = BUILTIN_LIBRARY.map(f => ({
       ...f,
-      enabled: enabledIds.size === 0 ? f.enabled : enabledIds.has(f.id),
+      enabled: hasSavedEnabled ? enabledIds.has(f.id) : f.enabled,
       weight: weightsMap[f.id] ?? f.weight ?? 1.0,
+      probability: probabilitiesMap[f.id] ?? f.probability,
+      directionOverride: directionsMap[f.id] ?? f.directionOverride,
     }));
+
+    const custom = customFactors.map(f => ({
+      ...f,
+      enabled: hasSavedEnabled ? enabledIds.has(f.id) : f.enabled,
+      weight: weightsMap[f.id] ?? f.weight ?? 1.0,
+      probability: probabilitiesMap[f.id] ?? f.probability,
+      directionOverride: directionsMap[f.id] ?? f.directionOverride,
+      userAdded: true,
+    }));
+
+    return [...builtins, ...custom];
   } catch {
     return BUILTIN_LIBRARY.map(f => ({ ...f }));
   }
@@ -309,11 +335,19 @@ export function loadUserFactors(): FactorItem[] {
 export function saveUserFactors(factors: FactorItem[]) {
   const enabledIds = factors.filter(f => f.enabled).map(f => f.id);
   const weightsMap: Record<string, number> = {};
+  const probabilitiesMap: Record<string, number> = {};
+  const directionsMap: Record<string, FactorItem["directionOverride"]> = {};
   for (const f of factors) {
     weightsMap[f.id] = f.weight ?? 1.0;
+    probabilitiesMap[f.id] = f.probability;
+    if (f.directionOverride) directionsMap[f.id] = f.directionOverride;
   }
+  const customFactors = factors.filter(f => f.userAdded);
   localStorage.setItem(STORAGE_ENABLED, JSON.stringify(enabledIds));
   localStorage.setItem(STORAGE_WEIGHTS, JSON.stringify(weightsMap));
+  localStorage.setItem(STORAGE_PROBABILITIES, JSON.stringify(probabilitiesMap));
+  localStorage.setItem(STORAGE_DIRECTIONS, JSON.stringify(directionsMap));
+  localStorage.setItem(STORAGE_CUSTOM_FACTORS, JSON.stringify(customFactors));
 }
 
 // 应用权重模板
@@ -328,5 +362,8 @@ export function applyWeightTemplate(factors: FactorItem[], template: WeightTempl
 export function resetToDefault(): FactorItem[] {
   localStorage.removeItem(STORAGE_ENABLED);
   localStorage.removeItem(STORAGE_WEIGHTS);
+  localStorage.removeItem(STORAGE_PROBABILITIES);
+  localStorage.removeItem(STORAGE_DIRECTIONS);
+  localStorage.removeItem(STORAGE_CUSTOM_FACTORS);
   return BUILTIN_LIBRARY.map(f => ({ ...f }));
 }

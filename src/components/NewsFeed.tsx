@@ -35,11 +35,10 @@ export default function NewsFeed({ onAddAsFactor }: Props) {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newsItems, setNewsItems] = useState<NewsItem[]>(MOCK_NEWS);
-  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsLoading, setNewsLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    setNewsLoading(true);
     fetchRealNews().then(items => {
       if (!mounted) return;
       setNewsItems(items);
@@ -62,7 +61,7 @@ export default function NewsFeed({ onAddAsFactor }: Props) {
       );
     }
     return list.sort((a, b) => b.timestamp - a.timestamp);
-  }, [filterCat, filterSent, search]);
+  }, [filterCat, filterSent, newsItems, search]);
 
   // 情感统计
   const stats = useMemo(() => {
