@@ -3,6 +3,20 @@ module.exports = {
   darkMode: ["class"],
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
+    fontSize: {
+      // 移动端优先，响应式字体大小
+      xs: ['12px', { lineHeight: '16px' }],
+      sm: ['13px', { lineHeight: '20px' }],
+      base: ['15px', { lineHeight: '24px' }],
+      lg: ['17px', { lineHeight: '28px' }],
+      xl: ['19px', { lineHeight: '32px' }],
+    },
+    minWidth: {
+      touch: '44px', // WCAG 最小触摸区域
+    },
+    minHeight: {
+      touch: '44px',
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",

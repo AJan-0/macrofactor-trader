@@ -251,17 +251,17 @@ export default function Dashboard() {
       </div>
 
       {/* 移动端布局 */}
-      <div className="lg:hidden flex-1 flex flex-col min-h-0 pb-[56px]">
+      <div className="lg:hidden flex-1 flex flex-col min-h-0 pb-14 md:pb-0">
         {/* 移动端叙事摘要（精简） */}
         {combo && (
-          <div className="px-3 py-1.5 border-b border-[#1e293b] bg-[#0a0e1a] flex items-center gap-2 overflow-x-auto scrollbar-hide">
-            <span className={`text-[10px] font-bold shrink-0 ${combo.combinedDirection === "bullish" ? "text-[#22c55e]" : combo.combinedDirection === "bearish" ? "text-[#ef4444]" : "text-[#94a3b8]"}`}>
+          <div className="px-3 py-2 md:py-2.5 border-b border-[#1e293b] bg-[#0a0e1a] flex items-center gap-2 overflow-x-auto scrollbar-hide text-xs md:text-sm">
+            <span className={`font-bold shrink-0 ${combo.combinedDirection === "bullish" ? "text-[#22c55e]" : combo.combinedDirection === "bearish" ? "text-[#ef4444]" : "text-[#94a3b8]"}`}>
               {combo.combinedDirection === "bullish" ? "▲ 偏多" : combo.combinedDirection === "bearish" ? "▼ 偏空" : "◆ 中性"}
             </span>
-            <span className="text-[10px] text-[#475569] shrink-0">
+            <span className="text-[#475569] shrink-0">
               置信度 {combo.overallConfidence.toFixed(0)}%
             </span>
-            <span className="text-[10px] text-[#475569] shrink-0">
+            <span className="text-[#475569] shrink-0">
               {combo.enabledCount}/{combo.totalCount} 因子
             </span>
           </div>
@@ -270,13 +270,11 @@ export default function Dashboard() {
         {/* 焦点事件（精简单行） */}
         <UpcomingCalendar events={events} />
 
-        {/* 图表区域 */}
-        <div className="flex-1 min-h-0">
-          <div className="h-full overflow-hidden">
-            <ErrorBoundary>
-              <ChartWidget />
-            </ErrorBoundary>
-          </div>
+        {/* 图表区域 - 动态高度 */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ErrorBoundary>
+            <ChartWidget />
+          </ErrorBoundary>
         </div>
       </div>
 
