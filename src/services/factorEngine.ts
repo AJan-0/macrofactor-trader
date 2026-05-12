@@ -301,12 +301,11 @@ export function analyzeFactors(factors: FactorItem[]): FactorCombination {
     };
   }).filter(s => s.direction !== "neutral" || s.strength > 0.2);
 
-  let bullishW = 0, bearishW = 0, totalW = 0;
+  let bullishW = 0, bearishW = 0;
   for (const s of signals) {
     const w = s.strength * (s.quality_score / 100);
     if (s.direction === "bullish") bullishW += w;
     else if (s.direction === "bearish") bearishW += w;
-    totalW += w;
   }
 
   const totalS = bullishW + bearishW;

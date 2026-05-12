@@ -58,7 +58,7 @@ export function initPerformanceMonitoring() {
         'DNS 查询': `${(navTiming.domainLookupEnd - navTiming.domainLookupStart).toFixed(0)}ms`,
         'TCP 连接': `${(navTiming.connectEnd - navTiming.connectStart).toFixed(0)}ms`,
         '文件传输': `${(navTiming.responseEnd - navTiming.responseStart).toFixed(0)}ms`,
-        '处理时间': `${(navTiming.domInteractive - navTiming.domLoading).toFixed(0)}ms`,
+        '处理时间': `${(navTiming.domInteractive - navTiming.responseEnd).toFixed(0)}ms`,
         '总加载时间': `${navTiming.loadEventEnd.toFixed(0)}ms`,
       });
     }

@@ -87,6 +87,9 @@ export default function ChartWidget() {
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const highlightRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+
+  const symbol = useAppStore(s => s.currentSymbol);
+  const timeframe = useAppStore(s => s.currentTimeframe);
   const { klinesRef, dataVersion } = useKlineData(symbol, timeframe);
 
   // 策略图层管理
@@ -95,8 +98,6 @@ export default function ChartWidget() {
   const skipNextZoomRef = useRef(false);
   const dataGenRef = useRef(0);
 
-  const symbol = useAppStore(s => s.currentSymbol);
-  const timeframe = useAppStore(s => s.currentTimeframe);
   const activeCategories = useAppStore(s => s.selectedCategories);
   const activeImpacts = useAppStore(s => s.selectedImpacts);
   const activeTimestamp = useAppStore(s => s.activeTimestamp);

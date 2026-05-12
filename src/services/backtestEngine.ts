@@ -64,6 +64,35 @@ export function calculateSummary(records: BacktestRecord[]): BacktestSummary {
   };
 }
 
-export function getFactorBacktest(records: BacktestRecord[], factorId: string): BacktestRecord | undefined {
-  return records.find(r => r.factor_id === factorId);
+function getRelatedBacktestCategories(category?: string): string[] {
+  switch (category) {
+    case "Monetary":
+    case "Inflation":
+    case "Political":
+    case "Sentiment":
+      return ["Macro"];
+    case "Geopolitics":
+      return ["GeoPolitics"];
+    case "CryptoNative":
+    case "Regulation":
+      return ["CryptoNative"];
+    default:
+      return [];
+  }
+}
+
+export function getFactorBacktest(
+  records: BacktestRecord[],
+  factorId: string,
+  factor?: { category?: string }
+): BacktestRecord | undefined {
+  const exact = records.find(r => r.factor_id === factorId);
+  if (exact) return exact;
+
+  const relatedCategories = getRelatedBacktestCategories(factor?.category);
+  if (relatedCategories.length === 0) return undefined;
+
+  return records
+    .filter(r => r.actual_1d !== null && relatedCategories.includes(r.category))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 }
