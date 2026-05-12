@@ -115,7 +115,10 @@ function getAlertStream(): AlertStreamManager {
 
 export function useAlertStream(handler: AlertHandler): void {
   const handlerRef = useRef<AlertHandler>(handler);
-  handlerRef.current = handler;
+
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
 
   useEffect(() => {
     const stream = getAlertStream();

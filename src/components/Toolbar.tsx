@@ -3,7 +3,8 @@ import { useAppStore } from "@/store/appStore";
 import { useI18n } from "@/i18n/context";
 import { useRealtimePrice } from "@/services/priceStream";
 import { useIsMobile } from "@/hooks/use-mobile";
-import AlertManager, { AlertBell, openAlertManager } from "@/components/AlertManager";
+import AlertManager, { AlertBell } from "@/components/AlertManager";
+import { openAlertManager } from "@/services/alertManagerController";
 import { fetchAlerts } from "@/services/alertApi";
 
 export default function Toolbar() {

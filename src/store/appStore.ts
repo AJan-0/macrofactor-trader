@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext } from "react";
 
 export type AssetSymbol = "BTC-USDT" | "ETH-USDT" | "GC=F";
 export type Timeframe = "1m" | "3m" | "5m" | "15m" | "1H" | "4H" | "1D";
@@ -39,20 +39,20 @@ export interface MacroEvent {
   btc_impact_7d: number | null;
 }
 
-interface AppState {
+export interface AppState {
   currentSymbol: AssetSymbol;
   currentTimeframe: Timeframe;
   selectedCategories: EventCategory[];
   selectedImpacts: ImpactLevel[];
   selectedEventId: string | null;
   activeTimestamp: number | null;
-  hoverTimestamp: number | null;  // 悬停因子对应的时间戳
+  hoverTimestamp: number | null;
   events: MacroEvent[];
   isLoading: boolean;
   error: string | null;
 }
 
-interface AppContextValue extends AppState {
+export interface AppContextValue extends AppState {
   setSymbol: (s: AssetSymbol) => void;
   setTimeframe: (tf: Timeframe) => void;
   toggleCategory: (cat: EventCategory) => void;
@@ -64,6 +64,19 @@ interface AppContextValue extends AppState {
   setError: (msg: string | null) => void;
 }
 
+export const INITIAL_APP_STATE: AppState = {
+  currentSymbol: "BTC-USDT",
+  currentTimeframe: "1D",
+  selectedCategories: [],
+  selectedImpacts: [],
+  selectedEventId: null,
+  activeTimestamp: null,
+  hoverTimestamp: null,
+  events: [],
+  isLoading: false,
+  error: null,
+};
+
 export const AppContext = createContext<AppContextValue | null>(null);
 
 export function useAppContext() {
@@ -72,48 +85,6 @@ export function useAppContext() {
   return ctx;
 }
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>({
-    currentSymbol: "BTC-USDT",
-    currentTimeframe: "1D",
-    selectedCategories: [],
-    selectedImpacts: [],
-    selectedEventId: null,
-    activeTimestamp: null,
-    hoverTimestamp: null,
-    events: [],
-    isLoading: false,
-    error: null,
-  });
-
-  const setSymbol      = useCallback((s: AssetSymbol) => setState(p => ({ ...p, currentSymbol: s, isLoading: true, error: null })), []);
-  const setTimeframe   = useCallback((tf: Timeframe) => setState(p => ({ ...p, currentTimeframe: tf, isLoading: true, error: null })), []);
-  const toggleCategory = useCallback((cat: EventCategory) => setState(p => ({
-    ...p, selectedCategories: p.selectedCategories.includes(cat)
-      ? p.selectedCategories.filter(c => c !== cat)
-      : [...p.selectedCategories, cat]
-  })), []);
-  const toggleImpact   = useCallback((imp: ImpactLevel) => setState(p => ({
-    ...p, selectedImpacts: p.selectedImpacts.includes(imp)
-      ? p.selectedImpacts.filter(i => i !== imp)
-      : [...p.selectedImpacts, imp]
-  })), []);
-  const selectEvent    = useCallback((id: string, ts: number) => setState(p => ({ ...p, selectedEventId: id, activeTimestamp: ts })), []);
-  const setHoverTimestamp = useCallback((ts: number | null) => setState(p => ({ ...p, hoverTimestamp: ts })), []);
-  const setEvents      = useCallback((ev: MacroEvent[]) => setState(p => ({ ...p, events: ev, isLoading: false })), []);
-  const setLoading     = useCallback((v: boolean) => setState(p => ({ ...p, isLoading: v })), []);
-  const setError       = useCallback((msg: string | null) => setState(p => ({ ...p, error: msg, isLoading: false })), []);
-
-  const value: AppContextValue = {
-    ...state,
-    setSymbol, setTimeframe, toggleCategory, toggleImpact,
-    selectEvent, setHoverTimestamp, setEvents, setLoading, setError,
-  };
-
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
-
-// Convenience hooks for components
 export const useChartConfig = () => {
   const ctx = useAppContext();
   return {
@@ -121,10 +92,12 @@ export const useChartConfig = () => {
     setSymbol: ctx.setSymbol, setTimeframe: ctx.setTimeframe,
   };
 };
+
 export const useChartStatus = () => {
   const ctx = useAppContext();
   return { isLoading: ctx.isLoading, error: ctx.error };
 };
+
 export const useAppStore = <T,>(selector: (state: AppContextValue) => T): T => {
   const ctx = useAppContext();
   return selector(ctx);

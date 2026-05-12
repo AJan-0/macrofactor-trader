@@ -11,7 +11,7 @@ import MobileSheet from "@/components/MobileSheet";
 import NewsFeed from "@/components/NewsFeed";
 import { useAppStore } from "@/store/appStore";
 import {
-  loadUserFactors, saveUserFactors, BUILTIN_LIBRARY, applyWeightTemplate,
+  loadUserFactors, saveUserFactors, resetToDefault, applyWeightTemplate,
   enableAll, disableAll, enableThisWeek, enableNextWeek,
 } from "@/data/factorLibrary";
 import type { WeightTemplate } from "@/data/factorLibrary";
@@ -21,128 +21,96 @@ import { loadBacktestData, calculateSummary } from "@/services/backtestEngine";
 import type { BacktestRecord, BacktestSummary } from "@/services/backtestEngine";
 import type { MobileTab } from "@/components/MobileNav";
 
+interface FactorState {
+  factors: FactorItem[];
+  combo: FactorCombination;
+}
+
+function buildFactorState(factors: FactorItem[]): FactorState {
+  return {
+    factors,
+    combo: analyzeFactors(factors),
+  };
+}
+
+function loadInitialFactorState(): FactorState {
+  return buildFactorState(loadUserFactors());
+}
+
 export default function Dashboard() {
   const events = useAppStore(s => s.events);
 
-  const [factors, setFactors] = useState<FactorItem[]>([]);
-  const [combo, setCombo] = useState<FactorCombination | null>(null);
+  const [{ factors, combo }, setFactorState] = useState<FactorState>(loadInitialFactorState);
   const [backtestRecords, setBacktestRecords] = useState<BacktestRecord[]>([]);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<string>("");
+  const [lastUpdate] = useState<string>(() => new Date().toLocaleTimeString());
 
   // 移动端状态
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // 初始化因子引擎
+  // 初始化异步回测数据
   useEffect(() => {
-    const loaded = loadUserFactors();
-    setFactors(loaded);
-    setCombo(analyzeFactors(loaded));
-
     loadBacktestData().then(records => {
       setBacktestRecords(records);
       setBacktestSummary(calculateSummary(records));
     });
+  }, []);
 
-    setLastUpdate(new Date().toLocaleTimeString());
+  const updateFactors = useCallback((recipe: (prev: FactorItem[]) => FactorItem[]) => {
+    setFactorState(prev => {
+      const next = recipe(prev.factors);
+      saveUserFactors(next);
+      return buildFactorState(next);
+    });
   }, []);
 
   // 切换因子开关
   const toggleFactor = useCallback((id: string) => {
-    setFactors(prev => {
-      const next = prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f);
-      saveUserFactors(next);
-      const result = analyzeFactors(next);
-      setCombo(result);
-      return next;
-    });
-  }, []);
+    updateFactors(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
+  }, [updateFactors]);
 
   // 调整概率
   const adjustProbability = useCallback((id: string, prob: number) => {
-    setFactors(prev => {
-      const next = prev.map(f => f.id === id ? { ...f, probability: prob } : f);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(prev => prev.map(f => f.id === id ? { ...f, probability: prob } : f));
+  }, [updateFactors]);
 
   // 调整权重
   const adjustWeight = useCallback((id: string, weight: number) => {
-    setFactors(prev => {
-      const next = prev.map(f => f.id === id ? { ...f, weight } : f);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(prev => prev.map(f => f.id === id ? { ...f, weight } : f));
+  }, [updateFactors]);
 
   // 添加自定义因子
   const addCustom = useCallback((f: FactorItem) => {
-    setFactors(prev => {
-      const next = [...prev, f];
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(prev => [...prev, f]);
+  }, [updateFactors]);
 
   // 重置
   const handleReset = useCallback(() => {
-    const def = BUILTIN_LIBRARY.map(f => ({ ...f }));
-    setFactors(def);
-    setCombo(analyzeFactors(def));
-    saveUserFactors(def);
+    setFactorState(buildFactorState(resetToDefault()));
   }, []);
 
   // 应用权重模板
   const handleApplyTemplate = useCallback((template: WeightTemplate) => {
-    setFactors(prev => {
-      const next = applyWeightTemplate(prev, template);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(prev => applyWeightTemplate(prev, template));
+  }, [updateFactors]);
 
   // 批量操作
   const handleEnableAll = useCallback(() => {
-    setFactors(prev => {
-      const next = enableAll(prev);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(enableAll);
+  }, [updateFactors]);
 
   const handleDisableAll = useCallback(() => {
-    setFactors(prev => {
-      const next = disableAll(prev);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(disableAll);
+  }, [updateFactors]);
 
   const handleEnableThisWeek = useCallback(() => {
-    setFactors(prev => {
-      const next = enableThisWeek(prev);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(enableThisWeek);
+  }, [updateFactors]);
 
   const handleEnableNextWeek = useCallback(() => {
-    setFactors(prev => {
-      const next = enableNextWeek(prev);
-      saveUserFactors(next);
-      setCombo(analyzeFactors(next));
-      return next;
-    });
-  }, []);
+    updateFactors(enableNextWeek);
+  }, [updateFactors]);
 
   // 移动端 Tab 切换时自动打开 Sheet
   const handleMobileTabChange = useCallback((tab: MobileTab) => {

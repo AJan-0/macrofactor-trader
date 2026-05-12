@@ -16,8 +16,9 @@ import { useAppStore, type AssetSymbol } from "@/store/appStore";
 import { useAlertStream, type AlertEvent } from "@/hooks/useAlertStream";
 import {
   fetchAlerts, createAlert as apiCreate, updateAlert as apiUpdate, deleteAlert as apiDel,
-  type AlertConfig, type AlertCreatePayload,
+  type AlertConfig, type AlertCreatePayload, type AlertParams,
 } from "@/services/alertApi";
+import { registerAlertManagerOpener } from "@/services/alertManagerController";
 import { saveLocalAlert } from "@/hooks/useIndexedDB";
 import {
   Dialog, DialogContent,
@@ -35,12 +36,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Bell, Plus, Trash2, ArrowLeft, ArrowUpDown, CandlestickChart, Layers,
 } from "lucide-react";
-
-// ── 全局打开方法 (供 Toolbar 等外部组件使用) ──
-let _openDialog: (() => void) | null = null;
-export function openAlertManager(): void {
-  _openDialog?.();
-}
 
 // ── 常量 ──
 
@@ -82,12 +77,21 @@ function paramsSummary(a: AlertConfig): string {
     case "price_cross":
       return `${a.params?.direction === "below" ? "↓" : "↑"} $${Number(a.params?.level).toLocaleString()} · ${a.params?.timeframe ?? "-"}`;
     case "reversal":
-      return `${(a.params?.pattern ?? "").replace(/_/g, " ")} · ${a.params?.timeframe ?? "-"}`;
+      return `${String(a.params?.pattern ?? "").replace(/_/g, " ")} · ${a.params?.timeframe ?? "-"}`;
     case "multi_tf":
-      return `${(a.params?.timeframes as string[] ?? []).join("/")} ≥${a.params?.required_count ?? 0}`;
+      return `${(Array.isArray(a.params?.timeframes) ? a.params.timeframes : []).join("/")} ≥${a.params?.required_count ?? 0}`;
     default:
       return "-";
   }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function stringParam(params: AlertParams, key: string, fallback: string): string {
+  const value = params[key];
+  return typeof value === "string" ? value : fallback;
 }
 
 // ── 主组件 ──
@@ -101,14 +105,14 @@ export default function AlertManager() {
 
   // 注册全局打开方法
   useEffect(() => {
-    _openDialog = () => setDialogOpen(true);
-    return () => { _openDialog = null; };
+    registerAlertManagerOpener(() => setDialogOpen(true));
+    return () => { registerAlertManagerOpener(null); };
   }, []);
 
   // ── form state ──
-  const [formType, setFormType] = useState<string>("price_cross");
+  const [formType, setFormType] = useState<AlertCreatePayload["alert_type"]>("price_cross");
   const [formSymbol, setFormSymbol] = useState<AssetSymbol>("BTC-USDT");
-  const [formParams, setFormParams] = useState<Record<string, any>>({});
+  const [formParams, setFormParams] = useState<AlertParams>({});
   const [formCooldown, setFormCooldown] = useState(30);
 
   const activeCount = useMemo(() => alerts.filter((a) => a.enabled).length, [alerts]);
@@ -118,8 +122,8 @@ export default function AlertManager() {
     try {
       const data = await fetchAlerts();
       setAlerts(data);
-    } catch (err: any) {
-      console.warn("[AlertManager] loadAlerts:", err?.message ?? err);
+    } catch (err: unknown) {
+      console.warn("[AlertManager] loadAlerts:", errorMessage(err));
     }
   }, []);
   useEffect(() => { if (dialogOpen) loadAlerts(); }, [dialogOpen, loadAlerts]);
@@ -152,7 +156,7 @@ export default function AlertManager() {
     switch (formType) {
       case "price_cross": if (!formParams.level) error = "请输入价格水平"; break;
       case "reversal":    if (!formParams.pattern) error = "请选择反转形态"; break;
-      case "multi_tf":    if (!formParams.timeframes?.length) error = "请输入至少一个时间框架"; break;
+      case "multi_tf":    if (!Array.isArray(formParams.timeframes) || !formParams.timeframes.length) error = "请输入至少一个时间框架"; break;
     }
     if (error) { toast.error(error); return; }
 
@@ -160,7 +164,7 @@ export default function AlertManager() {
     try {
       const payload: AlertCreatePayload = {
         symbol: formSymbol,
-        alert_type: formType as AlertCreatePayload["alert_type"],
+        alert_type: formType,
         params: { ...formParams },
         cooldown_minutes: formCooldown,
       };
@@ -168,8 +172,8 @@ export default function AlertManager() {
       toast.success("预警创建成功");
       setPage("list");
       await loadAlerts();
-    } catch (err: any) {
-      toast.error(`创建失败: ${err?.message ?? err}`);
+    } catch (err: unknown) {
+      toast.error(`创建失败: ${errorMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -220,14 +224,14 @@ export default function AlertManager() {
                 <Label className="text-[11px] text-[#94a3b8]">价格水平 ($)</Label>
                 <Input type="number" placeholder="e.g. 100000"
                   className="h-8 text-[12px] bg-[#0a0e1a] border-[#1e293b]"
-                  value={formParams.level ?? ""}
+                  value={typeof formParams.level === "number" ? formParams.level : ""}
                   onChange={(e) => setFormParams((p) => ({
                     ...p, level: parseFloat(e.target.value) || undefined,
                   }))} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-[#94a3b8]">穿越方向</Label>
-                <Select value={formParams.direction ?? "above"}
+                <Select value={stringParam(formParams, "direction", "above")}
                   onValueChange={(v) => setFormParams((p) => ({ ...p, direction: v }))}>
                   <SelectTrigger className="h-8 text-[12px] bg-[#0a0e1a] border-[#1e293b]"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-[#111827] border-[#1e293b] text-[12px]">
@@ -238,7 +242,7 @@ export default function AlertManager() {
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-[#94a3b8]">检测时间框架</Label>
-                <Select value={formParams.timeframe ?? "15m"}
+                <Select value={stringParam(formParams, "timeframe", "15m")}
                   onValueChange={(v) => setFormParams((p) => ({ ...p, timeframe: v }))}>
                   <SelectTrigger className="h-8 text-[12px] bg-[#0a0e1a] border-[#1e293b]"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-[#111827] border-[#1e293b] text-[12px]">
@@ -253,7 +257,7 @@ export default function AlertManager() {
             <>
               <div className="space-y-1">
                 <Label className="text-[11px] text-[#94a3b8]">反转形态</Label>
-                <Select value={formParams.pattern ?? "hammer"}
+                <Select value={stringParam(formParams, "pattern", "hammer")}
                   onValueChange={(v) => setFormParams((p) => ({ ...p, pattern: v }))}>
                   <SelectTrigger className="h-8 text-[12px] bg-[#0a0e1a] border-[#1e293b]"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-[#111827] border-[#1e293b] text-[12px]">
@@ -263,7 +267,7 @@ export default function AlertManager() {
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-[#94a3b8]">检测时间框架</Label>
-                <Select value={formParams.timeframe ?? "1H"}
+                <Select value={stringParam(formParams, "timeframe", "1H")}
                   onValueChange={(v) => setFormParams((p) => ({ ...p, timeframe: v }))}>
                   <SelectTrigger className="h-8 text-[12px] bg-[#0a0e1a] border-[#1e293b]"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-[#111827] border-[#1e293b] text-[12px]">
@@ -290,7 +294,7 @@ export default function AlertManager() {
                 <Label className="text-[11px] text-[#94a3b8]">最少共振数量</Label>
                 <Input type="number" min={2} max={5}
                   className="h-8 text-[12px] bg-[#0a0e1a] border-[#1e293b]"
-                  value={formParams.required_count ?? 2}
+                  value={typeof formParams.required_count === "number" ? formParams.required_count : 2}
                   onChange={(e) => setFormParams((p) => ({
                     ...p, required_count: Math.max(2, Math.min(5, parseInt(e.target.value) || 2)),
                   }))} />

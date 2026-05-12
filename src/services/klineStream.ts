@@ -264,14 +264,13 @@ export function useKlineStream(
   symbol: string,
   timeframe: Timeframe,
 ): { isConnected: boolean; lastCandle: KlineCandle | null } {
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState(() => getKlineStream().connected);
   const [lastCandle, setLastCandle] = useState<KlineCandle | null>(null);
   const handlerRef = useRef<CandleHandler | null>(null);
 
   // 连接状态轮询
   useEffect(() => {
     const manager = getKlineStream();
-    setConnected(manager.connected);
     const iv = setInterval(() => setConnected(manager.connected), 5000);
     return () => clearInterval(iv);
   }, []);

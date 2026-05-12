@@ -3,12 +3,15 @@
  * 对应后端 /api/alerts REST 端点
  */
 
+export type AlertParamValue = string | number | boolean | null | undefined | string[];
+export type AlertParams = Record<string, AlertParamValue>;
+
 export interface AlertConfig {
   id: string;
   symbol: string;
   alert_type: "price_cross" | "reversal" | "multi_tf";
   enabled: boolean;
-  params: Record<string, any>;
+  params: AlertParams;
   cooldown_minutes: number;
   created_at: string;
   updated_at: string;
@@ -19,7 +22,7 @@ export interface AlertConfig {
 export interface AlertCreatePayload {
   symbol: string;
   alert_type: "price_cross" | "reversal" | "multi_tf";
-  params: Record<string, any>;
+  params: AlertParams;
   cooldown_minutes: number;
 }
 
@@ -69,9 +72,9 @@ export async function deleteAlert(id: string): Promise<{ deleted: boolean }> {
 
 export async function testAlert(
   id: string,
-  candle?: Record<string, any>,
-): Promise<{ alert_id: string; alert_type: string; would_trigger: boolean; details: any }> {
-  const body: Record<string, any> = {};
+  candle?: AlertParams,
+): Promise<{ alert_id: string; alert_type: string; would_trigger: boolean; details: unknown }> {
+  const body: { candle?: AlertParams } = {};
   if (candle) body.candle = candle;
   return _fetch(`${API}/${encodeURIComponent(id)}/test`, {
     method: "POST",

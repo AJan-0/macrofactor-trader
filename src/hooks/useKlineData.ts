@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { fetchKlines, type KlineData } from '@/services/cryptoCompare';
-import type { Timeframe } from '@/store/appStore';
+import type { AssetSymbol, Timeframe } from '@/store/appStore';
 import { getCachedKlines, setCachedKlines } from '@/hooks/useIndexedDB';
 
 export interface UseKlineDataResult {
@@ -46,7 +46,7 @@ export interface UseKlineDataResult {
  *   // 在其他 useEffect 中监听 dataVersion 即可获知 K 线已更新
  */
 export function useKlineData(
-  symbol: string,
+  symbol: AssetSymbol,
   timeframe: Timeframe,
 ): UseKlineDataResult {
   const klinesRef = useRef<KlineData[]>([]);
@@ -60,9 +60,12 @@ export function useKlineData(
 
     // 立即清空旧数据 + 重置版本号（防止下游渲染旧数据）
     klinesRef.current = [];
-    setDataVersion(0);
-    setIsLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setDataVersion(0);
+      setIsLoading(true);
+      setError(null);
+    });
 
     // Step 1: 尝试 IndexedDB 缓存 → 先展示旧数据（乐观 UI）
     getCachedKlines(symbol, timeframe, 600_000)
@@ -81,7 +84,7 @@ export function useKlineData(
     console.log(`[useKlineData] Fetching ${symbol} ${timeframe}`);
     const start = performance.now();
 
-    fetchKlines(symbol as any, timeframe, undefined, abortCtrl.signal)
+    fetchKlines(symbol, timeframe, undefined, abortCtrl.signal)
       .then((data) => {
         if (cancelled) return;
         klinesRef.current = data;
