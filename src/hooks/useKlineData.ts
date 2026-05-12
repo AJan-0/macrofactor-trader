@@ -73,6 +73,8 @@ export function useKlineData(
     getCachedKlines(symbol, timeframe, 600_000)
       .then((cached) => {
         if (cancelled || !cached || cached.length === 0) return;
+        // Guard: don't overwrite if API data already arrived
+        if (klinesRef.current.length > 0) return;
         klinesRef.current = cached;
         setDataVersion((v) => v + 1);
         setIsLoading(false);
@@ -82,12 +84,18 @@ export function useKlineData(
       })
       .catch(() => {});
 
-    // Step 2: API 请求最新数据
+    // Step 2: API 请求最新数据（30s timeout to prevent hanging）
     console.log(`[useKlineData] Fetching ${symbol} ${timeframe}`);
     const start = performance.now();
+    let fetchTimedOut = false;
+    const fetchTimer = setTimeout(() => {
+      fetchTimedOut = true;
+      abortCtrl.abort();
+    }, 30_000);
 
     fetchKlines(symbol, timeframe, undefined, abortCtrl.signal)
       .then((data) => {
+        clearTimeout(fetchTimer);
         if (cancelled) return;
         klinesRef.current = data;
         const elapsed = (performance.now() - start).toFixed(0);
@@ -100,8 +108,16 @@ export function useKlineData(
         setCachedKlines(symbol, timeframe, data).catch(() => {});
       })
       .catch((err) => {
+        clearTimeout(fetchTimer);
         if (cancelled) return;
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          if (fetchTimedOut) {
+            // 超时发生时 klinesRef 可能依然为空
+            setError('K线数据加载超时，请检查网络连接');
+            setIsLoading(false);
+          }
+          return;
+        }
         const msg = err instanceof Error ? err.message : 'Failed to load K-lines';
         console.error('[useKlineData] ❌', msg);
         // 如果已有缓存数据则不报错（离线场景）

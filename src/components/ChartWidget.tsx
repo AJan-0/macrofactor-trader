@@ -15,7 +15,7 @@ const StrategyConsensusPanel = lazy(() => import("./StrategyConsensusPanel"));
 const PineTranspilerPanel = lazy(() => import("./PineTranspilerPanel"));
 
 let _factorCache: { data: MacroEvent[]; ts: number } | null = null;
-const FACTOR_CACHE_MS = 300_000; // 5-minute TTL prevents stale data
+const FACTOR_CACHE_MS = 300_000; // 5-minute TTL
 
 // @ts-expect-error - will be used in future
 async function loadFactorData(): Promise<MacroEvent[]> {
@@ -62,14 +62,13 @@ export default function ChartWidget() {
 
   const symbol = useAppStore((s) => s.currentSymbol);
   const timeframe = useAppStore((s) => s.currentTimeframe);
-  const { klinesRef, dataVersion, isLoading: klineLoading, bumpVersion } = useKlineData(symbol, timeframe);
+  const { klinesRef, dataVersion, isLoading: klineLoading, error, bumpVersion } = useKlineData(symbol, timeframe);
 
   const [loadedFactors, setLoadedFactors] = useState<MacroEvent[]>([]);
   const [alertToasts, setAlertToasts] = useState<AlertToast[]>([]);
   const [showStrategyPanel, setShowStrategyPanel] = useState(false);
   const [panelTab, setPanelTab] = useState<"list" | "consensus" | "pine">("list");
 
-  const storeLoading = useAppStore((s) => s.isLoading);
   const setLoading = useAppStore((s) => s.setLoading);
   const setError = useAppStore((s) => s.setError);
   const selectEvent = useAppStore((s) => s.selectEvent);
@@ -86,11 +85,12 @@ export default function ChartWidget() {
   }, [lastCandle, bumpVersion]);
 
   // Sync store isLoading with kline loading state
+  // 修复：无论 klines 是否为空，只要 kline 加载完成就清除 store loading
   useEffect(() => {
-    if (!klineLoading && klinesRef.current.length > 0) {
+    if (!klineLoading) {
       setLoading(false);
     }
-  }, [klineLoading, klinesRef.current.length]);
+  }, [klineLoading]);
 
   // Load factor data when symbol/timeframe changes
   useEffect(() => {
@@ -141,8 +141,14 @@ export default function ChartWidget() {
   // Strategy panel tabs state
   const [strategyTabs, setStrategyTabs] = useState<Record<string, "params" | "backtest">>({});
 
-  // Show skeleton only when store flags loading AND kline data is actually loading
-  const showSkeleton = storeLoading && klineLoading;
+  // Show skeleton when kline data is loading (independent of storeLoading)
+  const showSkeleton = klineLoading;
+
+  // Error state: kline finished loading but no data and has error
+  const hasError = !klineLoading && klinesRef.current.length === 0;
+  const errorMsg = error;
+  // Show error UI when there's an error and no data
+  const showError = hasError && !!errorMsg;
 
   return (
     <div
@@ -170,6 +176,36 @@ export default function ChartWidget() {
             <div className="w-14 bg-[#1e293b80] rounded animate-pulse" />
           </div>
           <div className="h-4 w-full bg-[#1e293b] rounded animate-pulse" />
+        </div>
+      )}
+
+      {/* Error State */}
+      {showError && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="bg-[#1a2236] border border-[#ef4444]/30 rounded-lg p-4 max-w-xs text-center">
+            <div className="text-[#ef4444] text-sm font-bold mb-2">⚠️ 数据加载失败</div>
+            <div className="text-[#94a3b8] text-xs mb-3">{errorMsg}</div>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-[11px] px-3 py-1.5 rounded bg-[#3b82f6] text-white hover:bg-[#2563eb] transition-colors"
+            >
+              重新加载
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Debug Status Badge (dev only) */}
+      {import.meta.env.DEV && (
+        <div className="absolute bottom-2 right-2 z-30 text-[9px] font-mono bg-[#1a2236]/90 border border-[#1e293b] rounded px-2 py-1 text-[#94a3b8] pointer-events-none">
+          <span className={klineLoading ? "text-[#eab308]" : "text-[#22c55e]"}>
+            {klineLoading ? "⏳" : "✓"} klines:{klinesRef.current.length}
+          </span>
+          <span className="mx-1">|</span>
+          <span className={isChartReady ? "text-[#22c55e]" : "text-[#ef4444]"}>
+            chart:{isChartReady ? "ready" : "wait"}
+          </span>
+          {error && <span className="text-[#ef4444] ml-1">err</span>}
         </div>
       )}
 
