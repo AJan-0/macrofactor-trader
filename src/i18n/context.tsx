@@ -1,14 +1,14 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext } from "react";
 
 export type Locale = "en" | "zh";
 
-interface I18nContextValue {
+export interface I18nContextValue {
   locale: Locale;
   t: (key: string) => string;
   setLocale: (l: Locale) => void;
 }
 
-const I18nContext = createContext<I18nContextValue | null>(null);
+export const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function useI18n() {
   const ctx = useContext(I18nContext);
@@ -16,43 +16,26 @@ export function useI18n() {
   return ctx;
 }
 
-const STORAGE_KEY = "macrofactor_locale";
+export const STORAGE_KEY = "macrofactor_locale";
 
-function getStoredLocale(): Locale {
+export function getStoredLocale(): Locale {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "zh" || stored === "en") return stored;
-  } catch {}
+  } catch {
+    return "en";
+  }
   // 检测浏览器语言
   const nav = navigator.language;
   if (nav.startsWith("zh")) return "zh";
   return "en";
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(getStoredLocale);
-
-  const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
-    try { localStorage.setItem(STORAGE_KEY, l); } catch {}
-  }, []);
-
-  const t = useCallback((key: string) => {
-    return translations[locale][key] || translations.en[key] || key;
-  }, [locale]);
-
-  return (
-    <I18nContext.Provider value={{ locale, t, setLocale }}>
-      {children}
-    </I18nContext.Provider>
-  );
-}
-
 // ──────────────────────────────
 // 翻译文件
 // ──────────────────────────────
 
-const translations: Record<Locale, Record<string, string>> = {
+export const translations: Record<Locale, Record<string, string>> = {
   en: {
     // Toolbar
     "app.name": "MACROFACTOR",

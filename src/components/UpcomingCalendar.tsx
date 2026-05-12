@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useI18n } from "@/i18n/context";
 import type { MacroEvent } from "@/store/appStore";
 
@@ -7,7 +8,7 @@ interface Props {
 
 export default function UpcomingCalendar({ events }: Props) {
   const { t, locale } = useI18n();
-  const now = Date.now() / 1000;
+  const [now] = useState(() => Date.now() / 1000);
   const week = 7 * 86400;
 
   const upcoming = events
