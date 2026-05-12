@@ -11,7 +11,7 @@ Usage:
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Coroutine, List, Optional, Set
+from typing import Any, Callable, Optional, Set
 
 try:
     import websockets
@@ -21,9 +21,6 @@ except ImportError:
     _HAS_WEBSOCKETS = False
     websockets = None
     WebSocketClientProtocol = None
-
-# Callback type: async (symbol, timeframe, candle_dict) → None
-CandleCallback = Callable[[str, str, dict], Coroutine[Any, Any, None]]
 
 logger = logging.getLogger(__name__)
 
@@ -63,28 +60,18 @@ class OKXWebSocketClient:
         4. On disconnect → auto-reconnects with exponential backoff.
     """
 
-    def __init__(self, on_candle_update: Optional[CandleCallback] = None) -> None:
+    def __init__(self, on_candle_update: Callable[[str, str, dict], Any]) -> None:
         if not _HAS_WEBSOCKETS:
             raise RuntimeError(
                 "websockets package not installed. "
                 "Run: pip install websockets"
             )
-        self._listeners: List[CandleCallback] = []
-        if on_candle_update is not None:
-            self._listeners.append(on_candle_update)
+        self.on_candle_update = on_candle_update
         self._ws: Optional[WebSocketClientProtocol] = None
         self._subscriptions: Set[str] = set()  # "{symbol}|{timeframe}"
         self._running = False
         self._reconnect_delay: float = 1.0
         self._task: Optional[asyncio.Task] = None
-
-    def add_listener(self, callback: CandleCallback) -> None:
-        """Add an additional async callback to receive candle updates.
-
-        Multiple consumers (broadcaster, alert monitor, etc.) can subscribe
-        to the same OKX WebSocket stream.
-        """
-        self._listeners.append(callback)
 
     async def start(self) -> None:
         """Start the connection loop (runs forever until `stop()` is called)."""
@@ -170,13 +157,9 @@ class OKXWebSocketClient:
         candle_dict["is_new"] = not candle_dict["confirm"]
 
         try:
-            for listener in self._listeners:
-                try:
-                    await listener(inst_id, timeframe, candle_dict)
-                except Exception as exc:
-                    logger.warning("candle listener failed: %s", exc)
+            await self.on_candle_update(inst_id, timeframe, candle_dict)
         except Exception as exc:
-            logger.warning("candle dispatch failed: %s", exc)
+            logger.warning("on_candle_update callback failed: %s", exc)
 
     async def subscribe(self, symbol: str, timeframe: str) -> None:
         """Subscribe to real-time candle updates for one symbol/timeframe."""

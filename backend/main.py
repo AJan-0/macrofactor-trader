@@ -20,11 +20,11 @@ WebSocket 实时 K 线:
 import asyncio
 import json
 import logging
-import time, uuid
+import time
 from contextlib import asynccontextmanager
-from typing import Any, Optional, Dict
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,13 +54,6 @@ from services.sync_service import sync_all, query_events_from_db
 from services.okx_ws import OKXWebSocketClient
 from services.kline_broadcaster import KlineBroadcaster
 
-# v0.4.0 预警系统
-from services.alert_store import AlertStore, AlertConfigDTO
-from services.alert_monitor import AlertMonitor
-from database import AsyncSessionLocal as _AsyncSessionLocal
-from datetime import datetime as _datetime
-from pydantic import BaseModel as PydanticBaseModel, Field
-
 # ──────────────────────────────
 # 日志配置
 # ──────────────────────────────
@@ -82,23 +75,6 @@ _cache: ICacheBackend | None = None
 _broadcaster: KlineBroadcaster | None = None
 _okx_ws: OKXWebSocketClient | None = None
 _okx_ws_task: asyncio.Task | None = None
-
-# v0.4.0 预警系统
-_alert_store: AlertStore | None = None
-_alert_monitor: AlertMonitor | None = None
-
-
-async def _on_alert_triggered(alert_id: str) -> None:
-    """后台任务: 将预警触发记录持久化到数据库。"""
-    if _alert_store is None:
-        return
-    try:
-        async with _AsyncSessionLocal() as session:
-            await _alert_store.mark_triggered(session, alert_id)
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            "Alert DB persist failed for %s: %s", alert_id, exc,
-        )
 
 
 # ──────────────────────────────
@@ -183,22 +159,6 @@ async def lifespan(app: FastAPI):
         _broadcaster = None
         _okx_ws = None
 
-    # ── 5. [v0.4.0] 预警系统 ──
-    try:
-        global _alert_store, _alert_monitor
-        _alert_store = AlertStore()
-        _alert_monitor = AlertMonitor(store=_alert_store)
-        _alert_monitor.set_on_trigger(_on_alert_triggered)
-        await _alert_monitor.refresh_configs()
-        if _okx_ws is not None:
-            _okx_ws.add_listener(_alert_monitor.on_candle)
-        logger.info(
-            "Alert monitor ready — %d alerts loaded (price_cross, reversal, multi_tf)",
-            len(_alert_monitor.get_cached_configs()),
-        )
-    except Exception as exc:
-        logger.warning("Alert monitor init failed (non-fatal): %s", exc)
-
     yield
 
     # ── Shutdown ──
@@ -264,20 +224,13 @@ async def health_check() -> dict[str, Any]:
         "connected_clients": len(_broadcaster._clients) if _broadcaster else 0,
     }
 
-    alert_info: dict[str, Any] = {
-        "enabled": _alert_monitor is not None,
-        "active_configs": len(_alert_monitor.get_cached_configs()) if _alert_monitor else 0,
-        "ws_clients": len(_alert_monitor._ws_clients) if _alert_monitor else 0,
-    }
-
     return {
         "status": "ok",
         "service": "macrofactor-trader-api",
         "version": "0.4.0",
-        "features": ["klines", "events", "db_persistence", "cache_layer", "realtime_ws", "alert_engine"],
+        "features": ["klines", "events", "db_persistence", "cache_layer", "realtime_ws"],
         "cache": cache_info,
         "websocket": ws_info,
-        "alerts": alert_info,
     }
 
 
@@ -545,199 +498,6 @@ async def trigger_sync() -> dict[str, Any]:
     except Exception as exc:
         logger.error("Manual sync failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
-
-
-# ──────────────────────────────
-# 预警系统 API (v0.4.0)
-# ──────────────────────────────
-
-class _AlertCreate(PydanticBaseModel):
-    symbol: str = Field(..., min_length=1, description="e.g. BTC-USDT")
-    alert_type: str = Field(..., pattern="^(price_cross|reversal|multi_tf)$")
-    params: dict = Field(..., description="Type-specific parameters (see docs)")
-    cooldown_minutes: int = Field(default=30, ge=1)
-
-
-class _AlertUpdate(PydanticBaseModel):
-    enabled: Optional[bool] = None
-    params: Optional[dict] = None
-    cooldown_minutes: Optional[int] = Field(default=None, ge=1)
-
-
-@app.post("/api/alerts", tags=["Alerts"], status_code=201)
-async def create_alert(
-    req: _AlertCreate,
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Create a new alert configuration."""
-    if _alert_store is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    dto = AlertConfigDTO(
-        id=str(uuid.uuid4()),
-        symbol=req.symbol,
-        alert_type=req.alert_type,
-        enabled=True,
-        params=req.params,
-        cooldown_minutes=req.cooldown_minutes,
-        created_at=_datetime.utcnow(),
-        updated_at=_datetime.utcnow(),
-    )
-    dto = await _alert_store.create(db, dto)
-    if _alert_monitor:
-        await _alert_monitor.refresh_configs()
-    return dto.to_dict()
-
-
-@app.get("/api/alerts", tags=["Alerts"])
-async def list_alerts(
-    symbol: str | None = Query(default=None),
-    use_cache: bool = Query(default=True, description="Use in-memory cache (faster)"),
-) -> dict[str, Any]:
-    """List all alerts, optionally filtered by symbol."""
-    if _alert_store is None or _alert_monitor is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    if use_cache:
-        configs = _alert_monitor.get_cached_configs()
-        if symbol:
-            configs = [c for c in configs if c.symbol == symbol.upper()]
-    else:
-        async with _AsyncSessionLocal() as session:
-            configs = await _alert_store.get_all(session, symbol=symbol)
-
-    return {"count": len(configs), "alerts": [c.to_dict() for c in configs]}
-
-
-@app.get("/api/alerts/{alert_id}", tags=["Alerts"])
-async def get_alert(alert_id: str) -> dict[str, Any]:
-    """Get a single alert by ID."""
-    if _alert_monitor is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-    cfg = await _alert_monitor.get_cached_by_id(alert_id)
-    if cfg is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    return cfg.to_dict()
-
-
-@app.put("/api/alerts/{alert_id}", tags=["Alerts"])
-async def update_alert(
-    alert_id: str,
-    req: _AlertUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Update an alert (enable/disable, change params, cooldown)."""
-    if _alert_store is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    updates: dict[str, Any] = {}
-    if req.enabled is not None:
-        updates["enabled"] = req.enabled
-    if req.params is not None:
-        updates["params"] = req.params
-    if req.cooldown_minutes is not None:
-        updates["cooldown_minutes"] = req.cooldown_minutes
-    if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
-
-    updates["updated_at"] = _datetime.utcnow()
-
-    dto = await _alert_store.update(db, alert_id, updates)
-    if dto is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    if _alert_monitor:
-        await _alert_monitor.refresh_configs()
-    return dto.to_dict()
-
-
-@app.delete("/api/alerts/{alert_id}", tags=["Alerts"])
-async def delete_alert(
-    alert_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, bool]:
-    """Delete an alert configuration."""
-    if _alert_store is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-    ok = await _alert_store.delete(db, alert_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    if _alert_monitor:
-        await _alert_monitor.refresh_configs()
-    return {"deleted": True}
-
-
-@app.post("/api/alerts/{alert_id}/test", tags=["Alerts"])
-async def test_alert(
-    alert_id: str,
-    candle: dict = Body(default=None),
-) -> dict[str, Any]:
-    """Test if an alert would trigger with a given candle (or defaults)."""
-    if _alert_monitor is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    cfg = await _alert_monitor.get_cached_by_id(alert_id)
-    if cfg is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    test_candle = candle or {
-        "symbol": cfg.symbol,
-        "timeframe": cfg.params.get("timeframe", "15m"),
-        "time": int(time.time()),
-        "open": 0, "high": 0, "low": 0, "close": 0, "volume": 0,
-        "confirm": True, "is_new": False,
-    }
-
-    triggered = await _alert_monitor.check_with_configs(
-        [cfg], cfg.symbol, test_candle.get("timeframe", "15m"), test_candle,
-    )
-
-    return {
-        "alert_id": alert_id,
-        "alert_type": cfg.alert_type,
-        "would_trigger": len(triggered) > 0,
-        "details": triggered[0] if triggered else None,
-    }
-
-
-# ──────────────────────────────
-# 预警 WebSocket 实时推送 (v0.4.0)
-# ──────────────────────────────
-
-@app.websocket("/ws/alerts")
-async def ws_alerts(websocket: WebSocket) -> None:
-    """WebSocket: 实时预警事件推送。
-
-    服务端 → 客户端:
-        {"type": "connected", "message": "Alert stream active", "active_alerts": N}
-        {"type": "alert", "alert_id": "...", "alert_type": "price_cross",
-         "symbol": "BTC-USDT", "timeframe": "15m", "time": 1716000000,
-         "price": 65000.5, "message": "...", "params": {...}}
-    """
-    if _alert_monitor is None:
-        await websocket.close(code=1013, reason="Alert service not available")
-        return
-
-    await websocket.accept()
-    _alert_monitor.add_ws_client(websocket)
-    await websocket.send_text(json.dumps({
-        "type": "connected",
-        "message": "Alert stream active",
-        "active_alerts": len(_alert_monitor.get_cached_configs()),
-    }))
-    logger.info("Alert WS client connected")
-
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            msg = json.loads(raw) if raw else {}
-            if msg.get("type") == "ping":
-                await websocket.send_text(json.dumps({"type": "pong"}))
-    except WebSocketDisconnect:
-        pass
-    except Exception as exc:
-        logger.warning("Alert WS client error: %s", exc)
-    finally:
-        _alert_monitor.remove_ws_client(websocket)
 
 
 # ──────────────────────────────

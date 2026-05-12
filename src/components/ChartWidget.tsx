@@ -129,7 +129,6 @@ export default function ChartWidget() {
     }, []),
   });
 
-
   // Handle event click from chart
   const handleEventClick = useCallback(
     (eventId: string, timestamp: number) => {
