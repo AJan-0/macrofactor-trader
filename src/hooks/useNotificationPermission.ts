@@ -16,23 +16,28 @@ interface UseNotificationPermissionReturn {
 }
 
 export function useNotificationPermission(): UseNotificationPermissionReturn {
-  const [permission, setPermission] = useState<NotificationState>(() => {
-    if (!('Notification' in window)) return 'unsupported';
-    return Notification.permission as NotificationState;
-  });
+  const [permission, setPermission] = useState<NotificationState>('default');
   const [shouldPrompt, setShouldPrompt] = useState(false);
 
   // 初始化：检查浏览器支持和当前权限状态
   useEffect(() => {
+    if (!('Notification' in window)) {
+      setPermission('unsupported');
+      return;
+    }
+
+    const currentPermission = Notification.permission as NotificationState;
+    setPermission(currentPermission);
+
     // 如果还未请求过权限，标记为可以提示
-    if (permission === 'default') {
+    if (currentPermission === 'default') {
       // 延迟显示提示，避免过于激进
       const timer = setTimeout(() => {
         setShouldPrompt(true);
       }, 5000); // 5 秒后提示
       return () => clearTimeout(timer);
     }
-  }, [permission]);
+  }, []);
 
   const isSupported = permission !== 'unsupported';
   const isGranted = permission === 'granted';
