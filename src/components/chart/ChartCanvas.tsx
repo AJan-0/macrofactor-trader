@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -59,13 +59,13 @@ interface ChartCanvasProps {
   timeframe: string;
 }
 
-export default function ChartCanvas({
+const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartCanvas({
   klines,
   events,
   strategyOutputs,
   onEventClick,
   timeframe,
-}: ChartCanvasProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -278,6 +278,17 @@ export default function ChartCanvas({
     };
   }, [onEventClick]);
 
+  // Expose chart API via ref to parent
+  // Use getters so the ref dynamically reads current values
+  // (chartRef etc. are set in useEffect after mount, so static values would be null)
+  useImperativeHandle(ref, () => ({
+    get chart() { return chartRef.current; },
+    get candleSeries() { return candleRef.current; },
+    get volumeSeries() { return volumeRef.current; },
+    get highlightSeries() { return highlightRef.current; },
+    get container() { return containerRef.current; },
+  }), []);
+
   // Update data when klines/events change
   useEffect(() => {
     if (!chartRef.current || !candleRef.current || !volumeRef.current) return;
@@ -397,7 +408,9 @@ export default function ChartCanvas({
       style={{ background: THEME.bg }}
     />
   );
-}
+});
+
+export default ChartCanvas;
 
 // Helper: build markers from events
 function buildMarkers(

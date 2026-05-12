@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef, lazy, Suspense } from "react";
+import { useState, useCallback, useRef, useEffect, lazy, Suspense } from "react";
 import { useAppStore } from "@/store/appStore";
 import { useKlineData } from "@/hooks/useKlineData";
 import { useKlineStream } from "@/services/klineStream";
 import { fetchRealMacroEvents } from "@/services/macroApi";
 import type { MacroEvent } from "@/store/appStore";
 import type { StrategySignal } from "@/services/strategyEngine";
+import type { ChartCanvasRef } from "./chart/ChartCanvas";
 import ChartCanvas from "./chart/ChartCanvas";
 import StrategyOverlay from "./chart/StrategyOverlay";
 import AlertPanel from "./chart/AlertPanel";
@@ -56,31 +57,43 @@ interface AlertToast {
 
 export default function ChartWidget() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const chartCanvasRef = useRef<{
-    chart: import("lightweight-charts").IChartApi | null;
-    candleSeries: import("lightweight-charts").ISeriesApi<"Candlestick"> | null;
-    volumeSeries: import("lightweight-charts").ISeriesApi<"Histogram"> | null;
-    highlightSeries: import("lightweight-charts").ISeriesApi<"Histogram"> | null;
-    container: HTMLDivElement | null;
-  } | null>(null);
+  const chartCanvasRef = useRef<ChartCanvasRef | null>(null);
 
   const symbol = useAppStore((s) => s.currentSymbol);
   const timeframe = useAppStore((s) => s.currentTimeframe);
-  const { klinesRef } = useKlineData(symbol, timeframe);
+  const { klinesRef, isLoading: klineLoading } = useKlineData(symbol, timeframe);
 
-  const [chartReady] = useState(false);
-  const [_events, _setEvents] = useState<MacroEvent[]>([]);
-  void _events; void _setEvents; // suppress unused warnings
+  const [loadedFactors, setLoadedFactors] = useState<MacroEvent[]>([]);
   const [alertToasts, setAlertToasts] = useState<AlertToast[]>([]);
   const [showStrategyPanel, setShowStrategyPanel] = useState(false);
   const [panelTab, setPanelTab] = useState<"list" | "consensus" | "pine">("list");
 
-  const isLoading = useAppStore((s) => s.isLoading);
-  // const setLoading = useAppStore((s) => s.setLoading);
-  // const setError = useAppStore((s) => s.setError);
+  const storeLoading = useAppStore((s) => s.isLoading);
+  const setLoading = useAppStore((s) => s.setLoading);
+  const setError = useAppStore((s) => s.setError);
   const selectEvent = useAppStore((s) => s.selectEvent);
 
+  // Sync store isLoading with kline loading state
+  useEffect(() => {
+    if (!klineLoading && klinesRef.current.length > 0) {
+      setLoading(false);
+    }
+  }, [klineLoading, klinesRef.current.length]);
+
+  // Load factor data when symbol/timeframe changes
+  useEffect(() => {
+    let cancelled = false;
+    loadFactorData().then((data) => {
+      if (!cancelled) setLoadedFactors(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [symbol, timeframe]);
+
   // Strategy overlay hook
+  // chartCanvasRef populated by ChartCanvas via forwardRef + useImperativeHandle with getters
+  const chartAPI = chartCanvasRef.current;
+  const isChartReady = chartAPI !== null && chartAPI.chart !== null;
+
   const {
     activeStrategies,
     strategyOutputs,
@@ -91,11 +104,11 @@ export default function ChartWidget() {
     resetStrategyParams,
     clearAllStrategies,
   } = StrategyOverlay({
-    chart: chartCanvasRef.current?.chart ?? null,
-    candleSeries: chartCanvasRef.current?.candleSeries ?? null,
+    chart: chartAPI?.chart ?? null,
+    candleSeries: chartAPI?.candleSeries ?? null,
     klines: klinesRef.current,
     symbol,
-    chartReady,
+    chartReady: isChartReady,
     onAlert: useCallback((toast: AlertToast) => {
       setAlertToasts((prev) => {
         if (prev.some((t) => t.id === toast.id)) return prev;
@@ -103,9 +116,6 @@ export default function ChartWidget() {
       });
     }, []),
   });
-
-  // Load factor data when symbol/timeframe changes
-  const [loadedFactors] = useState<MacroEvent[]>([]);
 
   // WebSocket real-time updates
   useKlineStream(symbol, timeframe);
@@ -121,6 +131,9 @@ export default function ChartWidget() {
   // Strategy panel tabs state
   const [strategyTabs, setStrategyTabs] = useState<Record<string, "params" | "backtest">>({});
 
+  // Show skeleton only when store flags loading AND kline data is actually loading
+  const showSkeleton = storeLoading && klineLoading;
+
   return (
     <div
       ref={containerRef}
@@ -129,6 +142,7 @@ export default function ChartWidget() {
     >
       {/* Chart Canvas */}
       <ChartCanvas
+        ref={chartCanvasRef}
         klines={klinesRef.current}
         events={loadedFactors}
         strategyOutputs={strategyOutputs}
@@ -137,7 +151,7 @@ export default function ChartWidget() {
       />
 
       {/* Skeleton Loading Overlay */}
-      {isLoading && (
+      {showSkeleton && (
         <div className="absolute inset-0 z-10 flex flex-col gap-2 p-4 pointer-events-none">
           <div className="h-5 w-32 bg-[#1e293b] rounded animate-pulse" />
           <div className="flex-1 flex gap-2">
