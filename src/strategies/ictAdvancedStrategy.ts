@@ -11,7 +11,7 @@
  * 7. SMT Divergence (Smart Money Technique - 简化版)
  */
 
-import type { Strategy, StrategyOutput, StrategyDefinition, KlineData } from "@/services/strategyEngine";
+import type { Strategy, StrategyOutput, StrategyDefinition, KlineData, StrategyLine, StrategyLabel, StrategySignal, StrategyZone } from "@/services/strategyEngine";
 
 const DEFINITION: StrategyDefinition = {
   id: "ict-advanced",
@@ -337,7 +337,7 @@ function detectSMT(klines: KlineData[], swings: SwingPoint[]): SMTSignal[] {
 // 主计算函数
 // ──────────────────────────────
 
-export function calculateICTAdvanced(klines: KlineData[], params: Record<string, any>): StrategyOutput {
+export function calculateICTAdvanced(klines: KlineData[], params: Record<string, import("../services/strategyEngine").ParamValue>): StrategyOutput {
   const swingLen = params.swingLen as number;
   const showOB = params.showOB as boolean;
   const obThreshold = params.obThreshold as number;
@@ -364,10 +364,10 @@ export function calculateICTAdvanced(klines: KlineData[], params: Record<string,
   const killzones = showKillzones ? detectKillzones(klines) : [];
   const smts = showSMT ? detectSMT(klines, swings) : [];
 
-  const lines: any[] = [];
-  const labels: any[] = [];
-  const signals: any[] = [];
-  const zones: any[] = [];
+  const lines: StrategyLine[] = [];
+  const labels: StrategyLabel[] = [];
+  const signals: StrategySignal[] = [];
+  const zones: StrategyZone[] = [];
 
   // 市场结构
   for (const s of shifts) {

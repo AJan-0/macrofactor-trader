@@ -1,3 +1,12 @@
+/**
+ * Error Boundary - 捕获子组件渲染错误，防止白屏
+ *
+ * 使用方式：
+ * <ErrorBoundary>
+ *   <YourComponent />
+ * </ErrorBoundary>
+ */
+
 import { Component, type ReactNode } from "react";
 
 interface Props {
@@ -11,37 +20,49 @@ interface State {
   error?: Error;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false };
-  }
+export default class ErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false };
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[ErrorBoundary] Caught error:", error, info);
+    console.error("[ErrorBoundary] 捕获到错误:", error);
+    console.error("[ErrorBoundary] 组件栈:", info.componentStack);
     this.props.onError?.(error, info);
   }
 
+  handleReset = () => {
+    this.setState({ hasError: false, error: undefined });
+  };
+
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) return this.props.fallback;
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
       return (
-        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center p-6 bg-[#111827] rounded-lg border border-[#1e293b]">
-          <div className="text-3xl mb-3">⚠️</div>
-          <div className="text-[13px] font-bold text-[#e2e8f0] mb-1">Something went wrong</div>
-          <div className="text-[11px] text-[#475569] mb-3 max-w-[300px]">
-            {this.state.error?.message || "An unexpected error occurred."}
+        <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-3 p-6 text-center" style={{ background: "#111827" }}>
+          <div className="text-4xl mb-2">⚠️</div>
+          <h3 className="text-[#e2e8f0] font-bold text-sm">组件渲染出错</h3>
+          <p className="text-[#94a3b8] text-xs max-w-[280px]">
+            {this.state.error?.message || "未知错误"}
+          </p>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={this.handleReset}
+              className="px-3 py-1.5 rounded bg-[#3b82f620] text-[#3b82f6] text-xs border border-[#3b82f6] hover:bg-[#3b82f640] transition-colors"
+            >
+              重试
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-3 py-1.5 rounded bg-[#1e293b] text-[#94a3b8] text-xs border border-[#1e293b] hover:text-[#e2e8f0] transition-colors"
+            >
+              刷新页面
+            </button>
           </div>
-          <button
-            onClick={() => this.setState({ hasError: false })}
-            className="text-[11px] px-3 py-1.5 rounded bg-[#3b82f620] text-[#3b82f6] border border-[#3b82f640] hover:bg-[#3b82f640] transition-colors"
-          >
-            Try Again
-          </button>
         </div>
       );
     }

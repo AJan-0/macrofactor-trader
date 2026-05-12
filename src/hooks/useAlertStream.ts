@@ -7,6 +7,7 @@
  *   {"type":"alert","alert_id":"...","alert_type":"price_cross","symbol":"...",
  *    "timeframe":"15m","time":1716000000,"price":65000.5,"message":"...","params":{...}}
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useRef } from "react";
 
@@ -54,9 +55,9 @@ class AlertStreamManager {
       try {
         const msg = JSON.parse(e.data as string);
         if (msg.type === "alert") {
-          for (const h of this.handlers) { try { h(msg as AlertEvent); } catch {} }
+          for (const h of this.handlers) { try { h(msg as AlertEvent); } catch { /* ignore */ } }
         }
-      } catch {}
+      } catch { /* ignore */ }
     };
     this.ws.onclose = () => {
       this._connected = false;

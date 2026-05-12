@@ -92,7 +92,7 @@ function calculateRMA(values: number[], period: number, index: number): number {
   return rma;
 }
 
-export function calculateVWAP(klines: KlineData[], params: Record<string, any>): StrategyOutput {
+export function calculateVWAP(klines: KlineData[], params: Record<string, import("../services/strategyEngine").ParamValue>): StrategyOutput {
   const prd = params.prd as number;
   const baseAPT = params.baseAPT as number;
   const useAdapt = params.useAdapt as boolean;
@@ -105,8 +105,8 @@ export function calculateVWAP(klines: KlineData[], params: Record<string, any>):
   if (n < prd + 1) return { lines: [], labels: [], signals: [], zones: [] };
 
   // 预计算ATR序列（如果启用自适应）
-  let atrSeries: number[] = [];
-  let atrAvgSeries: number[] = [];
+  const atrSeries: number[] = [];
+  const atrAvgSeries: number[] = [];
   if (useAdapt) {
     const atrLen = 50;
     for (let i = 0; i < n; i++) {

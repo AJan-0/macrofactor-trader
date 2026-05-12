@@ -46,6 +46,7 @@ const API_MAX_LIMIT = 2000;      // CryptoCompare 单次最大返回条数
 const MAX_REQUESTS = 15;         // 最多分页请求次数，防止过多API调用
 
 /** 获取 timeframe 的间隔秒数（用于实时更新判断新 bar） */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export function getTimeframeIntervalSeconds(tf: Timeframe): number {
   const cfg = TIMEFRAME_MAP[tf];
   if (!cfg) return 60;
@@ -74,8 +75,8 @@ async function fetchWithRetry(
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res;
     } catch (err: any) {
-      if (err.name === "AbortError") throw err;
-      lastErr = err;
+      if (err?.name === "AbortError") throw err;
+      lastErr = err instanceof Error ? err : new Error(String(err));
       if (i < retries - 1) {
         const delay = baseDelay * Math.pow(2, i);
         await new Promise(r => setTimeout(r, delay));
@@ -131,7 +132,7 @@ function getLSCache(): Record<string, LSCacheEntry> {
 }
 
 function saveLSCache(cache: Record<string, LSCacheEntry>) {
-  try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify(cache)); } catch {}
+  try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify(cache)); } catch { /* ignore */ }
 }
 
 export function getLSCached(symbol: AssetSymbol, tf: Timeframe): KlineData[] | null {
@@ -147,7 +148,7 @@ export function setLSCached(symbol: AssetSymbol, tf: Timeframe, data: KlineData[
   saveLSCache(cache);
 }
 
-async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<any> {
+async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<Record<string, any>> {
   const now = Date.now();
   const wait = Math.max(0, MIN_INTERVAL - (now - _lastCall));
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
@@ -236,18 +237,18 @@ async function _fetchKlinesFromAPI(
     let url = `${BASE}/v2/${cfg.endpoint}?fsym=${fsym}&tsym=USD&aggregate=${cfg.aggregate}&limit=${limit}&tryConversion=true`;
     if (toTs) url += `&toTs=${toTs}`;
 
-    const json = await rateLimitedFetch(url, signal);
+    const json = await rateLimitedFetch(url, signal) as Record<string, any>;
     const raw: any[] = json.Data?.Data || [];
 
     if (!raw.length) break;
 
-    const batch: KlineData[] = raw.map(d => ({
-      time: d.time,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-      volume: d.volumefrom + d.volumeto * 0.0001,
+    const batch: KlineData[] = raw.map((d: Record<string, any>) => ({
+      time: d.time as number,
+      open: d.open as number,
+      high: d.high as number,
+      low: d.low as number,
+      close: d.close as number,
+      volume: (d.volumefrom as number) + (d.volumeto as number) * 0.0001,
     }));
 
     allKlines.push(...batch);
@@ -289,7 +290,7 @@ export async function fetchRealtimePrice(symbol: AssetSymbol): Promise<RealtimeP
   if (!fsym) throw new Error(`Unsupported symbol ${symbol}`);
 
   const url = `${BASE}/pricemultifull?fsyms=${fsym}&tsyms=USD`;
-  const json = await rateLimitedFetch(url);
+  const json = await rateLimitedFetch(url) as Record<string, any>;
   const raw = json.RAW?.[fsym]?.USD;
 
   if (!raw) throw new Error("No price data returned");
@@ -312,7 +313,7 @@ export async function fetchAllRealtimePrices(): Promise<Record<AssetSymbol, Real
   const fsyms = symbols.map(s => SYMBOL_MAP[s]).join(",");
 
   const url = `${BASE}/pricemultifull?fsyms=${fsyms}&tsyms=USD`;
-  const json = await rateLimitedFetch(url);
+  const json = await rateLimitedFetch(url) as Record<string, any>;
 
   const result = {} as Record<AssetSymbol, RealtimePrice>;
   for (const sym of symbols) {

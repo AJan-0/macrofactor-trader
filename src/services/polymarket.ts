@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FactorItem } from "./factorEngine";
 
 const GAMMA_API = "https://gamma-api.polymarket.com";
@@ -70,7 +71,7 @@ export async function fetchKeyMarkets(): Promise<FactorItem[]> {
         }
       }
     }
-  } catch (err) {
+  } catch {
     console.warn("[Polymarket] Live API failed, using static data only");
   }
 

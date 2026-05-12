@@ -13,6 +13,7 @@
  * - 绘图函数 (plot, plotshape, plotchar, bgcolor, fill)
  * - 策略函数 (strategy.entry, strategy.close, strategy.exit)
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export interface TranspileResult {
   success: boolean;
@@ -123,7 +124,7 @@ export function transpilePineScript(pineCode: string): TranspileResult {
 
   // 提取策略名称和描述
   let strategyName = "Custom Strategy";
-  let strategyDesc = "Transpiled from Pine Script";
+  const strategyDesc = "Transpiled from Pine Script";
   const params: TranspileResult["definition"]["parameters"] = [];
 
   // 提取 indicator/strategy 标题
@@ -307,7 +308,7 @@ export function transpilePineScript(pineCode: string): TranspileResult {
         // 简单闭合逻辑
       }
     } catch (e: any) {
-      errors.push(`Line ${i + 1}: ${e.message}`);
+      errors.push(`Line ${i + 1}: ${e?.message || String(e)}`);
       jsLines.push(`  // ERROR at line ${i + 1}: ${rawLine}`);
     }
   }

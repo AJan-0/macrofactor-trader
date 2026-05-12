@@ -1,7 +1,7 @@
 // 新闻 API 服务层 —— CoinGecko News (免 key) + MOCK_NEWS 兜底
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NewsItem, Sentiment } from "@/data/mockNews";
-import { MOCK_NEWS } from "@/data/mockNews";
 
 const CG_NEWS_URL = "https://api.coingecko.com/api/v3/news";
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟
@@ -83,19 +83,12 @@ export async function fetchRealNews(): Promise<NewsItem[]> {
     const items = data.slice(0, 30).map(cgToNewsItem);
     console.log(`[NewsAPI] Fetched ${items.length} news items from CoinGecko`);
 
-    // 与 mock 合并（mock 作为补充，去重）
-    const seen = new Set(items.map(i => i.title));
-    const merged = [...items];
-    for (const m of MOCK_NEWS) {
-      if (!seen.has(m.title)) merged.push(m);
-    }
-
-    _cache = merged.sort((a, b) => b.timestamp - a.timestamp);
+    _cache = items.sort((a, b) => b.timestamp - a.timestamp);
     _cacheTs = Date.now();
     return _cache;
   } catch (err) {
-    console.warn("[NewsAPI] Failed to fetch real news, using mock:", err);
-    return MOCK_NEWS;
+    console.warn("[NewsAPI] Failed to fetch real news:", err);
+    return []; // 降级：空数组，前端显示"新闻暂不可用"
   }
 }
 

@@ -11,6 +11,7 @@
  *  - 写：HTTP 成功后异步写入 IndexedDB（不阻塞 UI）
  *  - 过期：K 线 1 小时，事件 30 分钟，预警无过期
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const DB_NAME = "macrofactor-trader";
 const DB_VERSION = 1;
@@ -96,7 +97,7 @@ export async function setCachedKlines(
       });
       tx.oncomplete = () => { db.close(); resolve(); };
     });
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 export async function clearAllKlineCache(): Promise<void> {
@@ -107,7 +108,7 @@ export async function clearAllKlineCache(): Promise<void> {
       tx.objectStore(STORE_KLINES).clear();
       tx.oncomplete = () => { db.close(); resolve(); };
     });
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 // ── Factor / 宏观事件缓存 ──
@@ -121,7 +122,7 @@ interface CachedFactors {
 export async function getCachedFactors(
   cacheKey: string = "all",
   maxAgeMs: number = 1_800_000,
-): Promise<any[] | null> {
+): Promise<unknown[] | null> {
   try {
     const db = await openDB();
     return new Promise((resolve) => {
@@ -148,7 +149,7 @@ export async function setCachedFactors(
       tx.objectStore(STORE_FACTORS).put({ key: cacheKey, events, updatedAt: Date.now() });
       tx.oncomplete = () => { db.close(); resolve(); };
     });
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 // ── 预警历史（本地）──
@@ -171,7 +172,7 @@ export async function saveLocalAlert(record: LocalAlertRecord): Promise<void> {
       tx.objectStore(STORE_ALERTS).add(record);
       tx.oncomplete = () => { db.close(); resolve(); };
     });
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 export async function getLocalAlerts(limit: number = 50): Promise<LocalAlertRecord[]> {
