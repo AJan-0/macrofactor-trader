@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import {
   createChart,
@@ -74,6 +73,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const highlightRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const onEventClickRef = useRef(onEventClick);
   const strategyOutputsRef = useRef(strategyOutputs);
   const eventsRef = useRef(events);
   const klinesRef = useRef(klines);
@@ -83,7 +83,8 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     strategyOutputsRef.current = strategyOutputs;
     eventsRef.current = events;
     klinesRef.current = klines;
-  }, [strategyOutputs, events, klines]);
+    onEventClickRef.current = onEventClick;
+  }, [strategyOutputs, events, klines, onEventClick]);
 
   // Initialize chart (runs once)
   useEffect(() => {
@@ -259,16 +260,16 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
         Math.min(param.point.y + 12, container.clientHeight - 260) + "px";
     });
 
-    // Click handler
     chart.subscribeClick((param) => {
       if (!param.time) return;
       const evts = eventsRef.current || [];
       const clicked = evts.find(
         (e) => Math.abs(e.timestamp - (param.time as number)) < 86400
       );
-      if (clicked) onEventClick(clicked.id, clicked.timestamp);
+      if (clicked) onEventClickRef.current(clicked.id, clicked.timestamp);
     });
 
+    // chart initialized once; onEventClick consumed via ref for stable handler identity
     return () => {
       tooltip.remove();
       chart.remove();
@@ -278,7 +279,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
       highlightRef.current = null;
       tooltipRef.current = null;
     };
-  }, [onEventClick]);
+  }, []);
 
   // Expose chart API via ref to parent
   // Use getters so the ref dynamically reads current values
@@ -316,7 +317,9 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     // Update markers
     const histFactors = events.filter((f) => !f.is_forecast);
     const markers = buildMarkers(histFactors, klines, [], []);
-    if (markers.length && candleRef.current) {
+    if (markers.length) {
+      // lightweight-charts v4.2 type defs omit setMarkers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (candleRef.current as any).setMarkers?.(markers);
     }
 
