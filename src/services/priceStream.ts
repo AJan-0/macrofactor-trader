@@ -104,7 +104,7 @@ class PriceStream {
           for (const cb of sub.listeners) {
             cb(msg.PRICE, changePct, msg.LASTUPDATE ?? Date.now());
           }
-        } catch {}
+        } catch { /* ignore */ }
       };
 
       this.ws.onclose = () => {

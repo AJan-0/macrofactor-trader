@@ -32,8 +32,8 @@ self.onmessage = (event: MessageEvent<StrategyWorkerRequest | { type: "ping"; id
   const data = event.data;
 
   // Ping-pong 握手
-  if ((data as any).type === "ping") {
-    self.postMessage({ type: "pong", id: (data as any).id });
+  if ((data as { type?: string }).type === "ping") {
+    self.postMessage({ type: "pong", id: (data as { id?: string }).id });
     return;
   }
 
@@ -48,7 +48,8 @@ self.onmessage = (event: MessageEvent<StrategyWorkerRequest | { type: "ping"; id
 
     const output = strategy.calculate({ klines, params });
     self.postMessage({ id, strategyId, output } satisfies StrategyWorkerResponse);
-  } catch (err: any) {
-    self.postMessage({ id, strategyId, output: null, error: err.message || String(err) } satisfies StrategyWorkerResponse);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    self.postMessage({ id, strategyId, output: null, error: msg } satisfies StrategyWorkerResponse);
   }
 };

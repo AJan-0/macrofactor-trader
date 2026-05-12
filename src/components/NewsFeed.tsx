@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useI18n } from "@/i18n/context";
 import { useAppStore } from "@/store/appStore";
-import { MOCK_NEWS, type NewsItem, type Sentiment } from "@/data/mockNews";
+import type { NewsItem, Sentiment } from "@/data/mockNews";
 import { fetchRealNews } from "@/services/newsApi";
 import type { FactorItem } from "@/services/factorEngine";
 
@@ -34,14 +34,16 @@ export default function NewsFeed({ onAddAsFactor }: Props) {
   const [filterSent, setFilterSent] = useState<Sentiment | null>(null);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [newsItems, setNewsItems] = useState<NewsItem[]>(MOCK_NEWS);
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     fetchRealNews().then(items => {
       if (!mounted) return;
       setNewsItems(items);
+      setNewsError(items.length === 0);
       setNewsLoading(false);
     });
     return () => { mounted = false; };
@@ -70,7 +72,7 @@ export default function NewsFeed({ onAddAsFactor }: Props) {
     return s;
   }, [filtered]);
 
-  const isFromApi = newsItems.length > MOCK_NEWS.length;
+  const isFromApi = newsItems.length > 0;
 
   const total = filtered.length || 1;
 
@@ -176,7 +178,18 @@ export default function NewsFeed({ onAddAsFactor }: Props) {
             onHover={setHoverTimestamp}
           />
         ))}
-        {filtered.length === 0 && (
+        {filtered.length === 0 && newsError && (
+          <div className="p-6 text-center">
+            <div className="text-2xl mb-2">📰</div>
+            <div className="text-[13px] text-[#94a3b8] mb-1">
+              {isZh ? "新闻暂不可用" : "News temporarily unavailable"}
+            </div>
+            <div className="text-[11px] text-[#475569]">
+              {isZh ? "请稍后重试" : "Please try again later"}
+            </div>
+          </div>
+        )}
+        {filtered.length === 0 && !newsError && !newsLoading && (
           <div className="p-4 text-center text-[12px] text-[#475569]">
             {isZh ? "没有匹配的新闻" : "No news matches filters"}
           </div>

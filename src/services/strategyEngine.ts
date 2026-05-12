@@ -7,6 +7,9 @@
  * 3. 支持参数化配置和实时重算
  */
 
+/** 策略参数支持的值类型 */
+export type ParamValue = string | number | boolean;
+
 export interface KlineData {
   time: number;
   open: number;
@@ -21,7 +24,7 @@ export interface StrategyParameter {
   name: string;
   nameZh?: string;
   type: "int" | "float" | "bool" | "color" | "string";
-  defaultValue: any;
+  defaultValue: ParamValue;
   min?: number;
   max?: number;
   step?: number;
@@ -66,7 +69,7 @@ export interface StrategySignal {
   direction: "buy" | "sell" | "neutral";
   label: string;
   strength: number; // 0-1
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface StrategyZone {
@@ -89,7 +92,7 @@ export interface StrategyOutput {
 
 export interface StrategyContext {
   klines: KlineData[];
-  params: Record<string, any>;
+  params: Record<string, ParamValue>;
 }
 
 export interface Strategy {
@@ -127,8 +130,8 @@ export const strategyRegistry = new StrategyRegistry();
 // 默认参数工具
 // ──────────────────────────────
 
-export function getDefaultParams(def: StrategyDefinition): Record<string, any> {
-  const params: Record<string, any> = {};
+export function getDefaultParams(def: StrategyDefinition): Record<string, ParamValue> {
+  const params: Record<string, ParamValue> = {};
   for (const p of def.parameters) {
     params[p.id] = p.defaultValue;
   }

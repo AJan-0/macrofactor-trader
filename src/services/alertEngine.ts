@@ -7,6 +7,7 @@
  * 3. 信号去重（同一信号不重复通知）
  * 4. 配置持久化到 localStorage
  */
+ 
 
 import type { StrategySignal } from "./strategyEngine";
 
@@ -42,7 +43,7 @@ export function getAlertConfig(): AlertConfig {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
     if (raw) return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
-  } catch {}
+  } catch { /* ignore */ }
   return { ...DEFAULT_CONFIG };
 }
 
@@ -55,7 +56,7 @@ function getAlertHistory(): AlertRecord[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { /* ignore */ }
   return [];
 }
 
@@ -108,7 +109,7 @@ let _audioCtx: AudioContext | null = null;
 function playBeep(frequency = 880, duration = 0.15, type: OscillatorType = "sine") {
   try {
     if (!_audioCtx) {
-      _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      _audioCtx = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
     }
     const ctx = _audioCtx;
     const oscillator = ctx.createOscillator();

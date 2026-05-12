@@ -2,6 +2,7 @@
  * 性能监控模块
  * 用于测量首屏加载、图表切换、移动端响应等关键指标
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface PerformanceMetrics {
   fcp?: number; // First Contentful Paint
@@ -11,7 +12,7 @@ interface PerformanceMetrics {
   mobileRenderTime?: number; // 移动端渲染时间
 }
 
-let metrics: PerformanceMetrics = {};
+const metrics: PerformanceMetrics = {};
 
 /**
  * 初始化性能监控
@@ -27,16 +28,16 @@ export function initPerformanceMonitoring() {
     const observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
         const name = entry.name;
-        const value = (entry as any).value;
+        const value = (entry as PerformanceEntry & { value?: number }).value;
 
         if (name === 'first-contentful-paint') {
           metrics.fcp = value;
-          console.log(`[Performance] FCP: ${value.toFixed(0)}ms`);
+          console.log(`[Performance] FCP: ${value?.toFixed(0)}ms`);
         } else if (name === 'largest-contentful-paint') {
           metrics.lcp = value;
-          console.log(`[Performance] LCP: ${value.toFixed(0)}ms`);
+          console.log(`[Performance] LCP: ${value?.toFixed(0)}ms`);
         } else if (name === 'layout-shift') {
-          metrics.cls = (metrics.cls || 0) + value;
+          metrics.cls = (metrics.cls || 0) + (value || 0);
           console.log(`[Performance] CLS: ${metrics.cls?.toFixed(3)}`);
         }
       }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Toolbar from "@/components/Toolbar";
 import ChartWidget from "@/components/ChartWidget";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import FactorDashboard from "@/components/FactorDashboard";
 import FactorTimeline from "@/components/FactorTimeline";
 import NarrativeBar from "@/components/NarrativeBar";
@@ -199,22 +199,24 @@ export default function Dashboard() {
         </div>
         {/* 右侧：因子面板 */}
         <div className="w-[30%] min-w-[300px] max-w-[400px] border-l border-[#1e293b]">
-          <FactorDashboard
-            combo={combo}
-            factors={factors}
-            backtestRecords={backtestRecords}
-            backtestSummary={backtestSummary}
-            onToggleFactor={toggleFactor}
-            onAdjustProb={adjustProbability}
-            onAdjustWeight={adjustWeight}
-            onAddCustom={addCustom}
-            onReset={handleReset}
-            onApplyTemplate={handleApplyTemplate}
-            onEnableAll={handleEnableAll}
-            onDisableAll={handleDisableAll}
-            onEnableThisWeek={handleEnableThisWeek}
-            onEnableNextWeek={handleEnableNextWeek}
-          />
+          <ErrorBoundary>
+            <FactorDashboard
+              combo={combo}
+              factors={factors}
+              backtestRecords={backtestRecords}
+              backtestSummary={backtestSummary}
+              onToggleFactor={toggleFactor}
+              onAdjustProb={adjustProbability}
+              onAdjustWeight={adjustWeight}
+              onAddCustom={addCustom}
+              onReset={handleReset}
+              onApplyTemplate={handleApplyTemplate}
+              onEnableAll={handleEnableAll}
+              onDisableAll={handleDisableAll}
+              onEnableThisWeek={handleEnableThisWeek}
+              onEnableNextWeek={handleEnableNextWeek}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 

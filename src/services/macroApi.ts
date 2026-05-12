@@ -1,6 +1,7 @@
 // 宏观数据 API 服务层 —— FRED (Federal Reserve) + 本地 factors.json 兜底
 // 使用方式：设置 localStorage "fred_api_key" 或修改下方常量
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MacroEvent } from "@/store/appStore";
 
 const FRED_BASE = "https://api.stlouisfed.org/fred";

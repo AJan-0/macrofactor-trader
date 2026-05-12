@@ -8,7 +8,7 @@
  * 4. 买卖流动性区域 BSL/SSL
  */
 
-import type { Strategy, StrategyOutput, StrategyDefinition, KlineData } from "@/services/strategyEngine";
+import type { Strategy, StrategyOutput, StrategyDefinition, KlineData, StrategyLine, StrategyLabel, StrategySignal, StrategyZone } from "@/services/strategyEngine";
 
 const DEFINITION: StrategyDefinition = {
   id: "ict-market-structure",
@@ -205,7 +205,7 @@ function detectFVG(klines: KlineData[]): FVG[] {
   return fvgs;
 }
 
-export function calculateICTStructure(klines: KlineData[], params: Record<string, any>): StrategyOutput {
+export function calculateICTStructure(klines: KlineData[], params: Record<string, import("../services/strategyEngine").ParamValue>): StrategyOutput {
   const swingLen = params.swingLen as number;
   const showFVG = params.showFVG as boolean;
   const showBSL = params.showBSL as boolean;
@@ -223,10 +223,10 @@ export function calculateICTStructure(klines: KlineData[], params: Record<string
   const fvgs = showFVG ? detectFVG(klines) : [];
 
   // 构建输出
-  const lines: any[] = [];
-  const labels: any[] = [];
-  const signals: any[] = [];
-  const zones: any[] = [];
+  const lines: StrategyLine[] = [];
+  const labels: StrategyLabel[] = [];
+  const signals: StrategySignal[] = [];
+  const zones: StrategyZone[] = [];
 
   // 市场结构标签
   for (const s of shifts) {
