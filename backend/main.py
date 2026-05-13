@@ -505,6 +505,7 @@ async def ws_klines(websocket: WebSocket) -> None:
 )
 @limiter.limit("60/minute")
 async def fetch_klines(
+    request: Request,
     response: Response,
     symbol: AssetSymbol = Query(
         AssetSymbol.BTC_USDT,
@@ -583,6 +584,7 @@ async def fetch_klines(
 )
 @limiter.limit("60/minute")
 async def fetch_macro_events(
+    request: Request,
     category: EventCategory | None = Query(default=None),
     impact: ImpactLevel | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
@@ -624,6 +626,7 @@ async def fetch_macro_events(
 )
 @limiter.limit("10/minute")
 async def clear_cache(
+    request: Request,
     symbol: str | None = Query(default=None),
     timeframe: str | None = Query(default=None),
 ) -> dict[str, Any]:
@@ -656,7 +659,7 @@ async def clear_cache(
     dependencies=[Depends(verify_admin_key)],
 )
 @limiter.limit("10/minute")
-async def trigger_sync() -> dict[str, Any]:
+async def trigger_sync(request: Request) -> dict[str, Any]:
     """手动触发全量数据同步。"""
     try:
         result = await sync_all()

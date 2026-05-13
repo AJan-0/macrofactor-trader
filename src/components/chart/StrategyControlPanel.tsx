@@ -292,7 +292,7 @@ function StrategyListTab({
                           className="flex-1 h-1.5 accent-[#3b82f6]"
                         />
                         <span className="text-[9px] font-mono text-[#e2e8f0] w-6">
-                          {as.params[param.id]}
+                          {String(as.params[param.id])}
                         </span>
                       </div>
                     ) : null}

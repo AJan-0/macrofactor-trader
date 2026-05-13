@@ -273,7 +273,7 @@ const Toolbar = memo(function Toolbar() {
       )}
     </div>
   );
-}
+});
 
 const ASSETS = [
   { key: "BTC-USDT", label: "asset.btc", color: "#f59e0b" },

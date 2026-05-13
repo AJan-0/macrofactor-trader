@@ -3,38 +3,25 @@
  * 当用户未授予通知权限时显示友好的提示
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 
 export default function NotificationPermissionBanner() {
   const { permission, isSupported, requestPermission, shouldPrompt } = useNotificationPermission();
-  const [isVisible, setIsVisible] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('notification-banner-dismissed') === 'true';
+  });
 
-  useEffect(() => {
-    // 检查本地存储中是否已被用户关闭
-    const dismissed = localStorage.getItem('notification-banner-dismissed');
-    if (dismissed === 'true') {
-      setIsDismissed(true);
-      return;
-    }
-
-    // 条件：支持通知、应该提示、未授予权限、未关闭
-    if (isSupported && shouldPrompt && permission !== 'granted' && !isDismissed) {
-      setIsVisible(true);
-    }
-  }, [isSupported, shouldPrompt, permission, isDismissed]);
+  const isVisible = isSupported && shouldPrompt && permission !== 'granted' && !isDismissed;
 
   const handleEnable = async () => {
-    const granted = await requestPermission();
-    if (granted) {
-      setIsVisible(false);
-    }
+    await requestPermission();
   };
 
   const handleDismiss = () => {
     localStorage.setItem('notification-banner-dismissed', 'true');
-    setIsVisible(false);
+    setIsDismissed(true);
   };
 
   if (!isVisible) return null;

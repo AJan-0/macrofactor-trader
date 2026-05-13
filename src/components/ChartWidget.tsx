@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, lazy, Suspense, memo } from "react";
+import { useState, useCallback, useRef, useEffect, memo } from "react";
 import { useAppStore } from "@/store/appStore";
 import { useI18n } from "@/i18n/context";
 import { useKlineData } from "@/hooks/useKlineData";
@@ -14,7 +14,7 @@ import StrategyControlPanel from "./chart/StrategyControlPanel";
 let _factorCache: { data: MacroEvent[]; ts: number } | null = null;
 const FACTOR_CACHE_MS = 300_000; // 5-minute TTL
 
-// @ts-expect-error - will be used in future
+// TODO: will be used in future
 async function loadFactorData(): Promise<MacroEvent[]> {
   if (_factorCache && Date.now() - _factorCache.ts < FACTOR_CACHE_MS) return _factorCache.data;
   try {
@@ -66,7 +66,8 @@ const ChartWidget = memo(function ChartWidget() {
   const [alertToasts, setAlertToasts] = useState<AlertToast[]>([]);
 
   const setLoading = useAppStore((s) => s.setLoading);
-  const setError = useAppStore((s) => s.setError);
+  // setError reserved for future error handling
+  // const setError = useAppStore((s) => s.setError);
   const selectEvent = useAppStore((s) => s.selectEvent);
 
   // WebSocket 实时 K 线增量合并
@@ -78,14 +79,14 @@ const ChartWidget = memo(function ChartWidget() {
     if (merged === klinesRef.current) return;
     klinesRef.current = merged;
     bumpVersion();
-  }, [lastCandle, bumpVersion]);
+  }, [lastCandle, bumpVersion, klinesRef]);
 
   // Sync store isLoading with kline loading state
   useEffect(() => {
     if (!klineLoading) {
       setLoading(false);
     }
-  }, [klineLoading]);
+  }, [klineLoading, setLoading]);
 
   // Load factor data when symbol/timeframe changes
   useEffect(() => {

@@ -74,7 +74,7 @@ export default function BacktestPanel({ signals, klines }: Props) {
         <MetricCard label={t("backtest.totalReturn")} value={`${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(1)}%`} color={totalReturn >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"} />
         <MetricCard label={t("backtest.winRate")} value={`${winRate}%`} color={winRate >= 50 ? "text-[#22c55e]" : "text-[#ef4444]"} />
         <MetricCard label={t("backtest.trades")} value={`${totalTrades}`} color="text-[#e2e8f0]" />
-        <MetricCard label={t("backtest.maxDrawdown")} value={`${maxDrawdown}%`} color="text-[#ef4444]"} />
+        <MetricCard label={t("backtest.maxDrawdown")} value={`${maxDrawdown}%`} color="text-[#ef4444]" />
         <MetricCard label={t("backtest.sharpe")} value={`${sharpeRatio}`} color={sharpeRatio >= 1 ? "text-[#22c55e]" : "text-[#eab308]"} />
         <MetricCard label={t("backtest.profitFactor")} value={`${profitFactor}`} color={profitFactor >= 1 ? "text-[#22c55e]" : "text-[#ef4444]"} />
       </div>
@@ -128,19 +128,19 @@ export default function BacktestPanel({ signals, klines }: Props) {
 
       {showTrades && (
         <div className="mt-1 max-h-[150px] overflow-y-auto space-y-1">
-          {trades.slice().reverse().map((t, i) => (
+          {trades.slice().reverse().map((trade, i) => (
             <div key={i} className="text-[7px] p-1 rounded bg-[#111827] border border-[#1e293b]/30">
               <div className="flex items-center justify-between">
-                <span className={`font-bold ${t.direction === "buy" ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
-                  {t.direction === "buy" ? t("backtest.long") : t("backtest.short")}
+                <span className={`font-bold ${trade.direction === "buy" ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
+                  {trade.direction === "buy" ? t("backtest.long") : t("backtest.short")}
                 </span>
-                <span className={tradeColor(t.pnl)}>
-                  {t.pnl >= 0 ? "+" : ""}${Math.abs(t.pnl).toFixed(0)} ({(t.pnlPct * 100).toFixed(1)}%)
+                <span className={tradeColor(trade.pnl)}>
+                  {trade.pnl >= 0 ? "+" : ""}${Math.abs(trade.pnl).toFixed(0)} ({(trade.pnlPct * 100).toFixed(1)}%)
                 </span>
               </div>
               <div className="flex items-center justify-between text-[#475569]">
-                <span>${t.entryPrice.toFixed(0)} &rarr; ${t.exitPrice.toFixed(0)}</span>
-                <span>{exitEmoji(t.exitReason)} {t.exitReason}</span>
+                <span>${trade.entryPrice.toFixed(0)} &rarr; ${trade.exitPrice.toFixed(0)}</span>
+                <span>{exitEmoji(trade.exitReason)} {trade.exitReason}</span>
               </div>
             </div>
           ))}

@@ -19,7 +19,7 @@ export function useKeyboardAvoider({ enabled = true }: UseKeyboardAvoiderOptions
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    let initialHeight = viewport.height;
+    const initialHeight = viewport.height;
 
     const handleResize = () => {
       const currentHeight = viewport.height;

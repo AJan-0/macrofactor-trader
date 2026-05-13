@@ -11,7 +11,7 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchKlines, type KlineData } from "@/services/cryptoCompare";
+import { fetchKlines } from "@/services/cryptoCompare";
 import type { AssetSymbol, Timeframe } from "@/store/appStore";
 
 const QUERY_KEY_PREFIX = "klines" as const;

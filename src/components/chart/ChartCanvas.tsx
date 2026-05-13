@@ -9,8 +9,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useAppStore, type MacroEvent } from "@/store/appStore";
-import { MOCK_NEWS } from "@/data/mockNews";
-import type { StrategyOutput, StrategySignal } from "@/services/strategyEngine";
+import type { StrategyOutput } from "@/services/strategyEngine";
 
 const THEME = {
   bg: "#111827",
@@ -215,6 +214,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     high: k.high,
     low: k.low,
     close: k.close,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [klines, dataVersion]);
 
   const volumeData = useMemo(() => {
@@ -224,11 +224,13 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
       value: k.volume,
       color: k.close >= k.open ? `${t.up}30` : `${t.down}30`,
     }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [klines, dataVersion]);
 
   const markers = useMemo(() => {
     const histFactors = events.filter((f) => !f.is_forecast);
     return buildMarkers(histFactors, klines, [], []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, klines, dataVersion]);
 
   // Update data when klines/events change
