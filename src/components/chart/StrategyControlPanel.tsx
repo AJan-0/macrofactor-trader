@@ -1,4 +1,5 @@
 import { useState, lazy, Suspense } from "react";
+import { useI18n } from "@/i18n/context";
 import type { StrategyDefinition, StrategyOutput, StrategySignal } from "@/services/strategyEngine";
 import type { KlineData } from "./ChartCanvas";
 import AlertPanel from "./AlertPanel";
@@ -41,6 +42,7 @@ export default function StrategyControlPanel({
   onAlertToastsChange,
   klines,
 }: StrategyControlPanelProps) {
+  const { t } = useI18n();
   const [showPanel, setShowPanel] = useState(false);
   const [panelTab, setPanelTab] = useState<"list" | "consensus" | "pine">("list");
   const [strategyTabs, setStrategyTabs] = useState<Record<string, "params" | "backtest">>({});
@@ -51,7 +53,7 @@ export default function StrategyControlPanel({
         onClick={() => setShowPanel(!showPanel)}
         className="text-[11px] px-2.5 py-1 rounded bg-[#1a2236] text-[#94a3b8] hover:text-[#e2e8f0] border border-[#1e293b] font-bold transition-colors"
       >
-        📈 策略 ({activeStrategies.length})
+        📈 {t("chart.strategy")} ({activeStrategies.length})
       </button>
 
       {showPanel && (
@@ -159,6 +161,7 @@ function StrategyListTab({
   setStrategyTabs,
   klines,
 }: StrategyListTabProps) {
+  const { t } = useI18n();
   return (
     <>
       {/* Add Strategy */}
@@ -172,7 +175,7 @@ function StrategyListTab({
           }}
           value=""
         >
-          <option value="">+ 添加策略...</option>
+          <option value="">+ {t("chart.addStrategy")}</option>
           {allStrategies.map((def) => (
             <option key={def.id} value={def.id}>
               {def.name}

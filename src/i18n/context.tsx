@@ -174,6 +174,54 @@ export const translations: Record<Locale, Record<string, string>> = {
     "common.cancel": "Cancel",
     "common.refresh": "Refresh",
     "common.loading": "Loading...",
+
+    // Chart
+    "chart.dataError": "Data loading failed",
+    "chart.reload": "Reload",
+    "chart.strategy": "Strategy",
+    "chart.strategyList": "Strategy List",
+    "chart.consensus": "Consensus",
+    "chart.pine": "Pine",
+    "chart.addStrategy": "Add strategy...",
+    "chart.params": "Params",
+    "chart.backtest": "Backtest",
+    "chart.clearAll": "Clear All",
+    "chart.noStrategies": "No strategies. Select from above to add.",
+    "chart.on": "ON",
+    "chart.off": "OFF",
+    "chart.signals": "signals",
+    "chart.lines": "lines",
+
+    // Toolbar
+    "toolbar.selectAsset": "Select asset",
+    "toolbar.assetList": "Asset list",
+
+    // Alert
+    "alert.enable": "Enable alerts",
+    "alert.settings": "Alert Settings",
+    "alert.desktopNotify": "Desktop Notification",
+    "alert.sound": "Sound Alert",
+    "alert.minStrength": "Min Strength",
+    "alert.cooldown": "Cooldown(s)",
+    "alert.clearHistory": "Clear History",
+    "alert.authorize": "Authorize",
+    "alert.buy": "BUY",
+    "alert.sell": "SELL",
+    "alert.neutral": "NEUTRAL",
+
+    // Backtest
+    "backtest.noData": "Insufficient data for backtest",
+    "backtest.totalReturn": "Total Return",
+    "backtest.winRate": "Win Rate",
+    "backtest.trades": "Trades",
+    "backtest.maxDrawdown": "Max DD",
+    "backtest.sharpe": "Sharpe",
+    "backtest.profitFactor": "Profit Factor",
+    "backtest.equityCurve": "Equity Curve",
+    "backtest.showTrades": "Show Trades",
+    "backtest.hideTrades": "Hide Trades",
+    "backtest.long": "LONG",
+    "backtest.short": "SHORT",
   },
   zh: {
     // Toolbar
@@ -313,5 +361,53 @@ export const translations: Record<Locale, Record<string, string>> = {
     "common.cancel": "取消",
     "common.refresh": "刷新",
     "common.loading": "加载中...",
+
+    // Chart
+    "chart.dataError": "数据加载失败",
+    "chart.reload": "重新加载",
+    "chart.strategy": "策略",
+    "chart.strategyList": "策略列表",
+    "chart.consensus": "共识",
+    "chart.pine": "Pine",
+    "chart.addStrategy": "添加策略...",
+    "chart.params": "参数",
+    "chart.backtest": "回测",
+    "chart.clearAll": "清空所有策略",
+    "chart.noStrategies": "暂无策略，从上方选择添加",
+    "chart.on": "ON",
+    "chart.off": "OFF",
+    "chart.signals": "signals",
+    "chart.lines": "lines",
+
+    // Toolbar
+    "toolbar.selectAsset": "选择资产",
+    "toolbar.assetList": "资产列表",
+
+    // Alert
+    "alert.enable": "启用预警",
+    "alert.settings": "预警设置",
+    "alert.desktopNotify": "桌面通知",
+    "alert.sound": "声音提醒",
+    "alert.minStrength": "最小强度",
+    "alert.cooldown": "冷却(秒)",
+    "alert.clearHistory": "清除通知历史",
+    "alert.authorize": "授权",
+    "alert.buy": "买入",
+    "alert.sell": "卖出",
+    "alert.neutral": "中性",
+
+    // Backtest
+    "backtest.noData": "数据不足，无法回测",
+    "backtest.totalReturn": "总收益",
+    "backtest.winRate": "胜率",
+    "backtest.trades": "交易数",
+    "backtest.maxDrawdown": "最大回撤",
+    "backtest.sharpe": "夏普",
+    "backtest.profitFactor": "盈亏比",
+    "backtest.equityCurve": "权益曲线",
+    "backtest.showTrades": "展开交易记录",
+    "backtest.hideTrades": "收起交易记录",
+    "backtest.long": "做多",
+    "backtest.short": "做空",
   },
 };

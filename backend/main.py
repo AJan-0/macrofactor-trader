@@ -18,6 +18,7 @@ WebSocket 实时 K 线:
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -26,6 +27,8 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect, status
+from pythonjsonlogger import jsonlogger
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,12 +73,30 @@ from services.okx_ws import OKXWebSocketClient
 from services.kline_broadcaster import KlineBroadcaster
 
 # ──────────────────────────────
-# 日志配置
+# 日志配置 (JSON)
 # ──────────────────────────────
+
+_request_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "request_id", default=None
+)
+
+class RequestIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_ctx.get()
+        return True
+
+log_handler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter(
+    "%(asctime)s %(levelname)s %(name)s %(message)s",
+    rename_fields={"asctime": "timestamp", "levelname": "level"},
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+)
+log_handler.setFormatter(formatter)
+log_handler.addFilter(RequestIdFilter())
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[log_handler],
 )
 logger = logging.getLogger(__name__)
 
@@ -90,6 +111,26 @@ _cache: ICacheBackend | None = None
 _broadcaster: KlineBroadcaster | None = None
 _okx_ws: OKXWebSocketClient | None = None
 _okx_ws_task: asyncio.Task | None = None
+
+# ──────────────────────────────
+# Prometheus 指标
+# ──────────────────────────────
+
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "path", "status"],
+)
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["method", "path"],
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+)
+okx_ws_connected = Gauge(
+    "okx_ws_connected",
+    "OKX WebSocket connection status (1=connected, 0=disconnected)",
+)
 
 
 # ──────────────────────────────
@@ -243,6 +284,32 @@ app.add_middleware(
 )
 
 # ──────────────────────────────
+# 全局中间件 (Prometheus + Request ID)
+# ──────────────────────────────
+
+@app.middleware("http")
+async def prometheus_and_request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", "")
+    _request_id_ctx.set(request_id)
+
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start_time
+
+    route = request.scope.get("route")
+    path = route.path if route else request.url.path
+    method = request.method
+    status_code = str(response.status_code)
+
+    http_request_duration_seconds.labels(method=method, path=path).observe(duration)
+    http_requests_total.labels(method=method, path=path, status=status_code).inc()
+
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+
+    return response
+
+# ──────────────────────────────
 # 全局异常处理器
 # ──────────────────────────────
 
@@ -318,6 +385,19 @@ async def health_check() -> dict[str, Any]:
         "cache": cache_info,
         "websocket": ws_info,
     }
+
+
+@app.get("/metrics", tags=["System"])
+async def metrics() -> Response:
+    """Prometheus 指标端点。"""
+    connected = 0
+    if _okx_ws is not None:
+        try:
+            connected = 1 if _okx_ws.is_connected() else 0
+        except Exception:
+            connected = 0
+    okx_ws_connected.set(connected)
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # ──────────────────────────────

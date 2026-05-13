@@ -8,6 +8,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/i18n/context";
 import { backtestStrategy } from "@/services/strategyEngine";
 import type { StrategySignal, KlineData } from "@/services/strategyEngine";
 
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function BacktestPanel({ signals, klines }: Props) {
+  const { t } = useI18n();
   const [showTrades, setShowTrades] = useState(false);
 
   const result = useMemo(() => {
@@ -27,7 +29,7 @@ export default function BacktestPanel({ signals, klines }: Props) {
 
   if (!result) {
     return (
-      <div className="text-[8px] text-[#475569] text-center py-2">数据不足，无法回测</div>
+      <div className="text-[8px] text-[#475569] text-center py-2">{t("backtest.noData")}</div>
     );
   }
 
@@ -69,17 +71,17 @@ export default function BacktestPanel({ signals, klines }: Props) {
     <div className="mt-2 pt-2 border-t border-[#1e293b]/50">
       {/* 绩效指标 */}
       <div className="grid grid-cols-3 gap-1 mb-2">
-        <MetricCard label="总收益" value={`${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(1)}%`} color={totalReturn >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"} />
-        <MetricCard label="胜率" value={`${winRate}%`} color={winRate >= 50 ? "text-[#22c55e]" : "text-[#ef4444]"} />
-        <MetricCard label="交易数" value={`${totalTrades}`} color="text-[#e2e8f0]" />
-        <MetricCard label="最大回撤" value={`${maxDrawdown}%`} color="text-[#ef4444]" />
-        <MetricCard label="夏普" value={`${sharpeRatio}`} color={sharpeRatio >= 1 ? "text-[#22c55e]" : "text-[#eab308]"} />
-        <MetricCard label="盈亏比" value={`${profitFactor}`} color={profitFactor >= 1 ? "text-[#22c55e]" : "text-[#ef4444]"} />
+        <MetricCard label={t("backtest.totalReturn")} value={`${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(1)}%`} color={totalReturn >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"} />
+        <MetricCard label={t("backtest.winRate")} value={`${winRate}%`} color={winRate >= 50 ? "text-[#22c55e]" : "text-[#ef4444]"} />
+        <MetricCard label={t("backtest.trades")} value={`${totalTrades}`} color="text-[#e2e8f0]" />
+        <MetricCard label={t("backtest.maxDrawdown")} value={`${maxDrawdown}%`} color="text-[#ef4444]"} />
+        <MetricCard label={t("backtest.sharpe")} value={`${sharpeRatio}`} color={sharpeRatio >= 1 ? "text-[#22c55e]" : "text-[#eab308]"} />
+        <MetricCard label={t("backtest.profitFactor")} value={`${profitFactor}`} color={profitFactor >= 1 ? "text-[#22c55e]" : "text-[#ef4444]"} />
       </div>
 
       {/* Equity Curve */}
       <div className="mb-2">
-        <div className="text-[7px] text-[#475569] mb-0.5">Equity Curve</div>
+        <div className="text-[7px] text-[#475569] mb-0.5">{t("backtest.equityCurve")}</div>
         <svg width={svgWidth} height={svgHeight} className="block">
           {/* 背景网格线 */}
           {[0, 0.5, 1].map(t => {
@@ -121,7 +123,7 @@ export default function BacktestPanel({ signals, klines }: Props) {
         onClick={() => setShowTrades(!showTrades)}
         className="w-full text-[8px] py-0.5 rounded border border-[#1e293b] text-[#475569] hover:text-[#e2e8f0] hover:border-[#475569] transition-colors"
       >
-        {showTrades ? "\u25B2 收起交易记录" : `\u25BC 展开交易记录 (${trades.length})`}
+        {showTrades ? `\u25B2 ${t("backtest.hideTrades")}` : `\u25BC ${t("backtest.showTrades")} (${trades.length})`}
       </button>
 
       {showTrades && (
@@ -130,7 +132,7 @@ export default function BacktestPanel({ signals, klines }: Props) {
             <div key={i} className="text-[7px] p-1 rounded bg-[#111827] border border-[#1e293b]/30">
               <div className="flex items-center justify-between">
                 <span className={`font-bold ${t.direction === "buy" ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
-                  {t.direction === "buy" ? "LONG" : "SHORT"}
+                  {t.direction === "buy" ? t("backtest.long") : t("backtest.short")}
                 </span>
                 <span className={tradeColor(t.pnl)}>
                   {t.pnl >= 0 ? "+" : ""}${Math.abs(t.pnl).toFixed(0)} ({(t.pnlPct * 100).toFixed(1)}%)

@@ -29,3 +29,7 @@ apscheduler==3.11.0
 # Rate limiting & circuit breaker
 slowapi==0.1.9
 pybreaker==1.2.0
+
+# Observability
+prometheus-client==0.25.0
+python-json-logger==4.1.0

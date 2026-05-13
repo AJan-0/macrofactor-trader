@@ -23,6 +23,8 @@ const Toolbar = memo(function Toolbar() {
 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const assetBtnRef = useRef<HTMLButtonElement>(null);
+  const assetMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -31,6 +33,19 @@ const Toolbar = memo(function Toolbar() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Escape 关闭下拉菜单
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        assetBtnRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
 
   const asset = ASSETS.find(a => a.key === symbol) || ASSETS[0];
   const changeDisplay = changePct !== null ? `${isUp ? '+' : ''}${changePct.toFixed(2)}%` : '';
@@ -90,18 +105,31 @@ const Toolbar = memo(function Toolbar() {
             {/* 资产下拉（移动端精简版） */}
             <div className="relative" ref={ref}>
               <button
+                ref={assetBtnRef}
                 onClick={() => setOpen(!open)}
                 disabled={isLoading}
+                aria-expanded={open}
+                aria-haspopup="listbox"
+                aria-controls={open ? "asset-menu" : undefined}
+                aria-label={t("toolbar.selectAsset")}
                 className="flex items-center gap-0.5 px-2 md:px-2.5 py-1 md:py-1.5 rounded bg-[#111827] border border-[#2d3a52] text-xs md:text-sm min-w-touch min-h-touch active:opacity-80"
               >
                 <span style={{ color: asset.color }}>●</span>
                 <span className="text-[#94a3b8]">▼</span>
               </button>
               {open && (
-                <div className="absolute top-full right-0 mt-2 w-32 md:w-40 bg-[#111827] border border-[#2d3a52] rounded-lg shadow-xl z-50 overflow-hidden">
+                <div
+                  ref={assetMenuRef}
+                  id="asset-menu"
+                  role="listbox"
+                  aria-label={t("toolbar.assetList")}
+                  className="absolute top-full right-0 mt-2 w-32 md:w-40 bg-[#111827] border border-[#2d3a52] rounded-lg shadow-xl z-50 overflow-hidden"
+                >
                   {ASSETS.map(a => (
                     <button
                       key={a.key}
+                      role="option"
+                      aria-selected={symbol === a.key}
                       onClick={() => { setSymbol(a.key); setOpen(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2.5 md:py-3 hover:bg-[#1a2236] transition-colors text-left text-sm md:text-base min-h-touch"
                       style={{ color: symbol === a.key ? '#e2e8f0' : '#94a3b8' }}
@@ -163,8 +191,13 @@ const Toolbar = memo(function Toolbar() {
             {/* Asset Dropdown */}
             <div className="relative" ref={ref}>
               <button
+                ref={assetBtnRef}
                 onClick={() => setOpen(!open)}
                 disabled={isLoading}
+                aria-expanded={open}
+                aria-haspopup="listbox"
+                aria-controls={open ? "asset-menu" : undefined}
+                aria-label={t("toolbar.selectAsset")}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#111827] border border-[#2d3a52] hover:border-[#475569] transition-all font-semibold"
               >
                 <span style={{ color: asset.color }}>●</span>
@@ -172,10 +205,18 @@ const Toolbar = memo(function Toolbar() {
                 <span className="text-[8px] text-[#475569]">▼</span>
               </button>
               {open && (
-                <div className="absolute top-full left-0 mt-2 w-36 bg-[#111827] border border-[#2d3a52] rounded-lg shadow-xl z-50 overflow-hidden">
+                <div
+                  ref={assetMenuRef}
+                  id="asset-menu"
+                  role="listbox"
+                  aria-label={t("toolbar.assetList")}
+                  className="absolute top-full left-0 mt-2 w-36 bg-[#111827] border border-[#2d3a52] rounded-lg shadow-xl z-50 overflow-hidden"
+                >
                   {ASSETS.map(a => (
                     <button
                       key={a.key}
+                      role="option"
+                      aria-selected={symbol === a.key}
                       onClick={() => { setSymbol(a.key); setOpen(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#1a2236] transition-colors text-left"
                       style={{ color: symbol === a.key ? '#e2e8f0' : '#94a3b8' }}

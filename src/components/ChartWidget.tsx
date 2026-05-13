@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, lazy, Suspense, memo } from "react";
 import { useAppStore } from "@/store/appStore";
+import { useI18n } from "@/i18n/context";
 import { useKlineData } from "@/hooks/useKlineData";
 import { useKlineStream, mergeCandle } from "@/services/klineStream";
 import { fetchRealMacroEvents } from "@/services/macroApi";
@@ -53,6 +54,7 @@ interface AlertToast {
 }
 
 const ChartWidget = memo(function ChartWidget() {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartCanvasRef = useRef<ChartCanvasRef | null>(null);
 
@@ -167,13 +169,13 @@ const ChartWidget = memo(function ChartWidget() {
       {showError && (
         <div className="absolute inset-0 z-10 flex items-center justify-center">
           <div className="bg-[#1a2236] border border-[#ef4444]/30 rounded-lg p-4 max-w-xs text-center">
-            <div className="text-[#ef4444] text-sm font-bold mb-2">⚠️ 数据加载失败</div>
+            <div className="text-[#ef4444] text-sm font-bold mb-2">⚠️ {t("chart.dataError")}</div>
             <div className="text-[#94a3b8] text-xs mb-3">{error}</div>
             <button
               onClick={() => window.location.reload()}
               className="text-[11px] px-3 py-1.5 rounded bg-[#3b82f6] text-white hover:bg-[#2563eb] transition-colors"
             >
-              重新加载
+              {t("chart.reload")}
             </button>
           </div>
         </div>

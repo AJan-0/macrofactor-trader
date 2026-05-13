@@ -6,7 +6,7 @@ models.py
 """
 
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, TypeVar, Generic
 from enum import Enum
 
 
@@ -81,11 +81,13 @@ class KlinesResponse(BaseModel):
 # 通用响应包装
 # ──────────────────────────────
 
-class ApiResponse(BaseModel):
+T = TypeVar("T")
+
+class ApiResponse(BaseModel, Generic[T]):
     """统一 API 响应格式（可选，便于前端统一处理）。"""
     code: int = Field(default=200)
     message: str = Field(default="success")
-    data: dict | list | None = None
+    data: T | None = None
 
 
 # ──────────────────────────────

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useI18n } from "@/i18n/context";
 import type { StrategySignal } from "@/services/strategyEngine";
 import {
   getAlertConfig,
@@ -23,6 +24,7 @@ interface AlertPanelProps {
 }
 
 export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) {
+  const { t } = useI18n();
   const [alertConfig, setAlertConfig] = useState<AlertConfig>(getAlertConfig);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
 
@@ -70,10 +72,10 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
       {/* Alert Settings Panel */}
       {showAlertSettings && (
         <div className="mb-2 p-2 rounded bg-[#111827] border border-[#1e293b]/50 space-y-1.5">
-          <div className="text-[10px] font-bold text-[#94a3b8] mb-1">预警设置</div>
+          <div className="text-[10px] font-bold text-[#94a3b8] mb-1">{t("alert.settings")}</div>
 
           <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-[10px] text-[#94a3b8]">启用预警</span>
+            <span className="text-[10px] text-[#94a3b8]">{t("alert.enable")}</span>
             <input
               type="checkbox"
               checked={alertConfig.enabled}
@@ -83,14 +85,14 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
           </label>
 
           <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-[10px] text-[#94a3b8]">桌面通知</span>
+            <span className="text-[10px] text-[#94a3b8]">{t("alert.desktopNotify")}</span>
             <div className="flex items-center gap-1">
               {getNotificationPermission() === "default" && (
                 <button
                   onClick={() => requestNotificationPermission()}
                   className="text-[9px] px-1.5 py-0.5 rounded bg-[#3b82f620] text-[#3b82f6]"
                 >
-                  授权
+                  {t("alert.authorize")}
                 </button>
               )}
               <input
@@ -106,7 +108,7 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
           </label>
 
           <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-[10px] text-[#94a3b8]">声音提醒</span>
+            <span className="text-[10px] text-[#94a3b8]">{t("alert.sound")}</span>
             <input
               type="checkbox"
               checked={alertConfig.soundAlert}
@@ -116,7 +118,7 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
           </label>
 
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-[#94a3b8]">最小强度</span>
+            <span className="text-[10px] text-[#94a3b8]">{t("alert.minStrength")}</span>
             <div className="flex items-center gap-1 flex-1 ml-2">
               <input
                 type="range"
@@ -136,7 +138,7 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-[#94a3b8]">冷却(秒)</span>
+            <span className="text-[10px] text-[#94a3b8]">{t("alert.cooldown")}</span>
             <div className="flex items-center gap-1 flex-1 ml-2">
               <input
                 type="range"
@@ -159,7 +161,7 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
             onClick={() => clearAlertHistory()}
             className="w-full text-[9px] py-0.5 rounded border border-[#47556930] text-[#475569] hover:text-[#e2e8f0] hover:border-[#475569] transition-colors"
           >
-            清除通知历史
+            {t("alert.clearHistory")}
           </button>
         </div>
       )}
@@ -186,7 +188,7 @@ export default function AlertPanel({ toasts, onToastsChange }: AlertPanelProps) 
             >
               <div className="flex items-center justify-between mb-0.5">
                 <span className={`text-[9px] font-bold ${text}`}>
-                  {isBuy ? "🟢 买入" : isSell ? "🔴 卖出" : "⚪ 中性"}
+                  {isBuy ? `🟢 ${t("alert.buy")}` : isSell ? `🔴 ${t("alert.sell")}` : `⚪ ${t("alert.neutral")}`}
                 </span>
                 <button
                   onClick={() => dismissToast(toast.id)}
