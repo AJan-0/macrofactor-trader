@@ -23,12 +23,51 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────
+# 熔断器（可选依赖）
+# ──────────────────────────────
+
+try:
+    from pybreaker import CircuitBreaker
+    _okx_breaker = CircuitBreaker(fail_max=5, reset_timeout=30)
+except ImportError:
+    class _DummyBreaker:
+        def __call__(self, func):
+            return func
+    _okx_breaker = _DummyBreaker()  # type: ignore[assignment]
+
+# ──────────────────────────────
 # 常量配置
 # ──────────────────────────────
 
 _OKX_BASE_URL: str = "https://www.okx.com"
 _DEFAULT_TIMEOUT: httpx.Timeout = httpx.Timeout(10.0, connect=5.0)
 _MAX_RESULTS: int = 300  # OKX 单页最大条数
+
+# 模块级复用 AsyncClient（连接池）
+_okx_client: httpx.AsyncClient | None = None
+
+
+def get_okx_client() -> httpx.AsyncClient:
+    """获取（或创建）模块级复用的 AsyncClient 实例。"""
+    global _okx_client
+    if _okx_client is None:
+        limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
+        _okx_client = httpx.AsyncClient(
+            timeout=_DEFAULT_TIMEOUT,
+            limits=limits,
+            http2=False,  # OKX 暂不支持 HTTP/2
+        )
+        logger.info("OKX AsyncClient created (connection pool)")
+    return _okx_client
+
+
+async def close_okx_client() -> None:
+    """关闭 AsyncClient，释放连接池资源。应在应用 shutdown 时调用。"""
+    global _okx_client
+    if _okx_client is not None:
+        await _okx_client.aclose()
+        _okx_client = None
+        logger.info("OKX AsyncClient closed")
 
 
 class OKXClientError(Exception):
@@ -94,6 +133,7 @@ def _parse_klines_response(raw_data: list[list[Any]]) -> list[KlineData]:
 # 核心请求函数
 # ──────────────────────────────
 
+@_okx_breaker
 async def get_crypto_klines(
     inst_id: str,
     bar: str = "1D",
@@ -120,23 +160,23 @@ async def get_crypto_klines(
         "limit": str(min(limit, _MAX_RESULTS)),
     }
 
-    async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
-        try:
-            response: httpx.Response = await client.get(url, params=params)
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            logger.error(
-                "OKX HTTP error: status=%s, url=%s, response=%s",
-                exc.response.status_code,
-                exc.request.url,
-                exc.response.text[:500],
-            )
-            raise OKXRequestError(
-                f"OKX HTTP {exc.response.status_code}: {exc.response.text[:200]}"
-            ) from exc
-        except httpx.RequestError as exc:
-            logger.error("OKX network error: %s", exc)
-            raise OKXRequestError(f"Network error: {exc}") from exc
+    client = get_okx_client()
+    try:
+        response: httpx.Response = await client.get(url, params=params)
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "OKX HTTP error: status=%s, url=%s, response=%s",
+            exc.response.status_code,
+            exc.request.url,
+            exc.response.text[:500],
+        )
+        raise OKXRequestError(
+            f"OKX HTTP {exc.response.status_code}: {exc.response.text[:200]}"
+        ) from exc
+    except httpx.RequestError as exc:
+        logger.error("OKX network error: %s", exc)
+        raise OKXRequestError(f"Network error: {exc}") from exc
 
     # 解析 JSON
     try:

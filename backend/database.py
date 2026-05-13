@@ -2,33 +2,44 @@
 database.py
 异步数据库引擎配置与 Session 管理。
 
-使用 aiosqlite 作为 SQLite 异步驱动，零配置启动。
-可通过环境变量 DATABASE_URL 切换到 PostgreSQL。
+支持 SQLite（开发）和 PostgreSQL（生产）。
+通过环境变量 DATABASE_URL 切换，生产环境强烈推荐 PostgreSQL。
 """
 
-import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+
+from config import get_settings
 
 # ──────────────────────────────
 # 配置
 # ──────────────────────────────
 
-# 默认使用 SQLite（零配置），生产环境可切 PostgreSQL
-DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///./macrofactor.db"
-DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+settings = get_settings()
+DATABASE_URL = settings.database_url
+IS_SQLITE = "sqlite" in DATABASE_URL
 
 # ──────────────────────────────
 # 引擎
 # ──────────────────────────────
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,           # True 调试 SQL 语句
-    future=True,
-    # SQLite 必需：避免 "too many open files"
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
-)
+_engine_kwargs: dict = {
+    "echo": False,
+    "future": True,
+    "pool_pre_ping": True,  # 检测并回收死连接
+}
+
+if IS_SQLITE:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # PostgreSQL 连接池配置
+    _engine_kwargs.update({
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_recycle": 3600,
+    })
+
+engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 
 # ──────────────────────────────
 # Session 工厂
@@ -53,7 +64,14 @@ Base = declarative_base()
 # ──────────────────────────────
 
 async def init_db() -> None:
-    """创建所有表结构（应用启动时调用）。"""
+    """创建所有表结构（应用启动时调用）。
+
+    注意：生产环境应使用 Alembic 管理 schema 变更，
+    此函数仅在开发/测试环境使用。
+    """
+    if not IS_SQLITE:
+        # 生产环境禁止自动 create_all
+        return
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useKeyboardAvoider } from "@/hooks/useKeyboardAvoider";
 
 interface Props {
   open: boolean;
@@ -11,6 +12,7 @@ export default function MobileSheet({ open, onClose, title, children }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const currentY = useRef(0);
+  useKeyboardAvoider({ enabled: open });
 
   useEffect(() => {
     if (open) {
@@ -75,7 +77,7 @@ export default function MobileSheet({ open, onClose, title, children }: Props) {
           </button>
         </div>
         {/* 内容区 */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
           {children}
         </div>
       </div>

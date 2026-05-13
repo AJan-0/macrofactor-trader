@@ -2,7 +2,6 @@
  * 性能监控模块
  * 用于测量首屏加载、图表切换、移动端响应等关键指标
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface PerformanceMetrics {
   fcp?: number; // First Contentful Paint
@@ -12,7 +11,7 @@ interface PerformanceMetrics {
   mobileRenderTime?: number; // 移动端渲染时间
 }
 
-const metrics: PerformanceMetrics = {};
+let metrics: PerformanceMetrics = {};
 
 /**
  * 初始化性能监控
@@ -59,7 +58,7 @@ export function initPerformanceMonitoring() {
         'DNS 查询': `${(navTiming.domainLookupEnd - navTiming.domainLookupStart).toFixed(0)}ms`,
         'TCP 连接': `${(navTiming.connectEnd - navTiming.connectStart).toFixed(0)}ms`,
         '文件传输': `${(navTiming.responseEnd - navTiming.responseStart).toFixed(0)}ms`,
-        '处理时间': `${(navTiming.domInteractive - navTiming.responseEnd).toFixed(0)}ms`,
+        '处理时间': `${(navTiming.domInteractive - navTiming.domLoading).toFixed(0)}ms`,
         '总加载时间': `${navTiming.loadEventEnd.toFixed(0)}ms`,
       });
     }
@@ -193,7 +192,7 @@ export function exportMetricsAsJSON(): string {
       timestamp: new Date().toISOString(),
       metrics,
       userAgent: navigator.userAgent,
-      connection: (navigator as any).connection?.effectiveType || 'unknown',
+      connection: (navigator as unknown as { connection?: { effectiveType?: string } }).connection?.effectiveType || 'unknown',
     },
     null,
     2

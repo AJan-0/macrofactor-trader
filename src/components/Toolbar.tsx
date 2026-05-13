@@ -1,14 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
+import { useTheme } from "next-themes";
 import { useAppStore } from "@/store/appStore";
 import { useI18n } from "@/i18n/context";
 import { useRealtimePrice } from "@/services/priceStream";
 import { useIsMobile } from "@/hooks/use-mobile";
-import AlertManager, { AlertBell } from "@/components/AlertManager";
-import { openAlertManager } from "@/services/alertManagerController";
-import { fetchAlerts } from "@/services/alertApi";
 
-export default function Toolbar() {
+const Toolbar = memo(function Toolbar() {
   const { t, locale, setLocale } = useI18n();
+  const { theme, setTheme } = useTheme();
   const { symbol, setSymbol, timeframe, setTimeframe, events, isLoading } = useAppStore(s => ({
     symbol: s.currentSymbol,
     setSymbol: s.setSymbol,
@@ -21,15 +20,6 @@ export default function Toolbar() {
   const isUp = (changePct ?? 0) >= 0;
   const lastUpdate = price ? new Date().toLocaleTimeString() : "";
   const isMobile = useIsMobile();
-  const [alertCount, setAlertCount] = useState(0);
-
-  // 定期更新预警数量
-  useEffect(() => {
-    const update = () => fetchAlerts().then(a => setAlertCount(a.filter(x => x.enabled).length)).catch(() => {});
-    update();
-    const iv = setInterval(update, 60_000);
-    return () => clearInterval(iv);
-  }, []);
 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -46,8 +36,7 @@ export default function Toolbar() {
   const changeDisplay = changePct !== null ? `${isUp ? '+' : ''}${changePct.toFixed(2)}%` : '';
 
   return (
-    <>
-      <div
+    <div
       className="flex items-center border-b border-[#1e293b] bg-[#0a0e1a] md:h-12 h-14"
       style={{ color: '#e2e8f0', fontSize: 12, flexShrink: 0 }}
     >
@@ -132,6 +121,15 @@ export default function Toolbar() {
               {t("toolbar.lang")}
             </button>
 
+            {/* 主题切换 */}
+            <button
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="text-xs md:text-sm px-1.5 md:px-2 py-1 md:py-1.5 rounded bg-[#1a2236] text-[#94a3b8] border border-[#1e293b] transition-colors flex-shrink-0 min-w-touch min-h-touch active:opacity-80"
+              title="Toggle theme"
+            >
+              {theme === "dark" ? "🌙" : "☀️"}
+            </button>
+
             {/* 实时指示 */}
             <span className="flex items-center gap-1 flex-shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
@@ -150,6 +148,13 @@ export default function Toolbar() {
               className="text-[11px] px-2 py-0.5 rounded bg-[#1a2236] text-[#94a3b8] hover:text-white border border-[#1e293b] transition-colors"
             >
               {t("toolbar.lang")}
+            </button>
+            <button
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="text-[11px] px-2 py-0.5 rounded bg-[#1a2236] text-[#94a3b8] hover:text-white border border-[#1e293b] transition-colors"
+              title="Toggle theme"
+            >
+              {theme === "dark" ? "🌙" : "☀️"}
             </button>
           </div>
 
@@ -222,13 +227,10 @@ export default function Toolbar() {
               <span className="text-[#22c55e] font-semibold text-[11px]">{t("toolbar.live")}</span>
             </span>
             {lastUpdate && <span className="font-mono text-[10px]">{t("toolbar.lastUpdate")} {lastUpdate}</span>}
-            <AlertBell onClick={openAlertManager} activeCount={alertCount} />
           </div>
         </div>
       )}
     </div>
-    <AlertManager />
-    </>
   );
 }
 
@@ -237,6 +239,8 @@ const ASSETS = [
   { key: "ETH-USDT", label: "asset.eth", color: "#3b82f6" },
   { key: "GC=F", label: "asset.gold", color: "#fbbf24" },
 ] as const;
+
+export default Toolbar;
 
 const TIMEFRAMES = [
   { key: "1D", label: "tf.1D" },

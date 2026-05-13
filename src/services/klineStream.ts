@@ -61,6 +61,7 @@ class KlineStreamManager {
   private rt: ReturnType<typeof setTimeout> | null = null;
   private pt: ReturnType<typeof setInterval> | null = null;
   private _connected = false;
+  private _statusListeners = new Set<(connected: boolean) => void>();
 
   connect(): void {
     if (this.ws &&
@@ -81,6 +82,7 @@ class KlineStreamManager {
       this.rd = RECONNECT_BASE;
       this._resubAll();
       this._startPing();
+      this._emitStatus();
     };
 
     this.ws.onmessage = (e: MessageEvent) => {
@@ -94,6 +96,7 @@ class KlineStreamManager {
       console.log('[KlineWS] disconnected');
       this._connected = false;
       this._stopPing();
+      this._emitStatus();
       this._schedule();
     };
 
@@ -127,9 +130,23 @@ class KlineStreamManager {
     if (this.rt) { clearTimeout(this.rt); this.rt = null; }
     if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
     this._connected = false;
+    this._emitStatus();
   }
 
   get connected(): boolean { return this._connected; }
+
+  onStatusChange(cb: (connected: boolean) => void): () => void {
+    this._statusListeners.add(cb);
+    // 立即回调当前状态
+    try { cb(this._connected); } catch { /* ignore */ }
+    return () => { this._statusListeners.delete(cb); };
+  }
+
+  private _emitStatus(): void {
+    for (const cb of this._statusListeners) {
+      try { cb(this._connected); } catch { /* ignore */ }
+    }
+  }
 
   private _resubAll(): void {
     const subs = Array.from(this.subs.values()).map(s => ({
@@ -268,11 +285,10 @@ export function useKlineStream(
   const [lastCandle, setLastCandle] = useState<KlineCandle | null>(null);
   const handlerRef = useRef<CandleHandler | null>(null);
 
-  // 连接状态轮询
+  // 连接状态监听（事件驱动，无轮询）
   useEffect(() => {
     const manager = getKlineStream();
-    const iv = setInterval(() => setConnected(manager.connected), 5000);
-    return () => clearInterval(iv);
+    return manager.onStatusChange(setConnected);
   }, []);
 
   // 订阅/取消订阅

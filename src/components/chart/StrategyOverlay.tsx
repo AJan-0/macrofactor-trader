@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useRef, useCallback, useState } from "react";
 import { LineSeries, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
 import { strategyRegistry } from "@/strategies";
@@ -110,13 +109,14 @@ export default function StrategyOverlay({
 
   // Cleanup on unmount
   useEffect(() => {
+    const map = strategyLineRefs.current;
     return () => {
       if (chart) {
-        for (const [, series] of strategyLineRefs.current) {
+        for (const [, series] of map) {
           try { chart.removeSeries(series); } catch { /* ignore */ }
         }
       }
-      strategyLineRefs.current.clear();
+      map.clear();
     };
   }, [chart]);
 
@@ -207,6 +207,8 @@ export default function StrategyOverlay({
       }));
       signalMarkers.sort((a, b) => (a.time as number) - (b.time as number));
       if (signalMarkers.length > 0 && candleSeries) {
+        // lightweight-charts v4.2 type defs omit setMarkers
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (candleSeries as any).setMarkers?.(signalMarkers);
       }
     }

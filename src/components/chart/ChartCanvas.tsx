@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from "react";
+import { useTouchGestures } from "@/hooks/useTouchGestures";
 import {
   createChart,
   CandlestickSeries,
@@ -57,21 +57,24 @@ interface ChartCanvasProps {
   strategyOutputs: Map<string, StrategyOutput>;
   onEventClick: (eventId: string, timestamp: number) => void;
   timeframe: string;
+  dataVersion: number;
 }
 
-export default function ChartCanvas({
+const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartCanvas({
   klines,
   events,
   strategyOutputs,
   onEventClick,
   timeframe,
-}: ChartCanvasProps) {
+  dataVersion,
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const highlightRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const onEventClickRef = useRef(onEventClick);
   const strategyOutputsRef = useRef(strategyOutputs);
   const eventsRef = useRef(events);
   const klinesRef = useRef(klines);
@@ -81,7 +84,8 @@ export default function ChartCanvas({
     strategyOutputsRef.current = strategyOutputs;
     eventsRef.current = events;
     klinesRef.current = klines;
-  }, [strategyOutputs, events, klines]);
+    onEventClickRef.current = onEventClick;
+  }, [strategyOutputs, events, klines, onEventClick]);
 
   // Initialize chart (runs once)
   useEffect(() => {
@@ -93,35 +97,19 @@ export default function ChartCanvas({
       layout: {
         background: { color: t.bg },
         textColor: t.text,
-        attributionLogo: false,
       },
       grid: {
-        vertLines: { color: t.grid, style: 2 },
-        horzLines: { color: t.grid, style: 2 },
+        vertLines: { color: t.grid },
+        horzLines: { color: t.grid },
       },
-      crosshair: {
-        mode: 1,
-        vertLine: {
-          color: "#3b82f6",
-          width: 1,
-          style: 3,
-          labelBackgroundColor: "#3b82f6",
-        },
-        horzLine: {
-          color: "#3b82f6",
-          width: 1,
-          style: 3,
-          labelBackgroundColor: "#3b82f6",
-        },
-      },
+      crosshair: { mode: 1 },
       rightPriceScale: {
         borderColor: t.grid,
-        scaleMargins: { top: 0.08, bottom: 0.1 },
       },
       timeScale: {
         borderColor: t.grid,
         timeVisible: false,
-        barSpacing: 6,
+        barSpacing: 12,
       },
       autoSize: true,
     });
@@ -138,117 +126,48 @@ export default function ChartCanvas({
     candleRef.current = candleSeries;
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: "#3b82f6",
-      priceScaleId: "",
       priceFormat: { type: "volume" },
+      priceScaleId: "",
     });
     volumeSeries.priceScale().applyOptions({
-      scaleMargins: { top: 0.85, bottom: 0 },
+      scaleMargins: { top: 0.8, bottom: 0 },
     });
     volumeRef.current = volumeSeries;
 
-    const hlSeries = chart.addSeries(HistogramSeries, {
-      color: "#3b82f640",
-      priceScaleId: "right",
-      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
-      lastValueVisible: false,
+    const highlightSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "",
     });
-    hlSeries.priceScale().applyOptions({
-      scaleMargins: { top: 0.02, bottom: 0.02 },
+    highlightSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0 },
     });
-    highlightRef.current = hlSeries;
+    highlightRef.current = highlightSeries;
 
     // Tooltip
     const tooltip = document.createElement("div");
-    tooltip.style.cssText = `
-      position: absolute;
-      display: none;
-      padding: 10px;
-      font-size: 13px;
-      font-family: 'JetBrains Mono', monospace;
-      color: #e2e8f0;
-      background: #1a2236;
-      border: 1px solid #2d3a52;
-      border-radius: 6px;
-      pointer-events: none;
-      z-index: 1000;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      max-width: 320px;
-    `;
+    tooltip.style.cssText =
+      "position:absolute;display:none;z-index:100;background:#1a2236;border:1px solid #2d3a52;border-radius:6px;padding:8px 12px;font-size:11px;color:#e2e8f0;pointer-events:none;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.5);";
     container.appendChild(tooltip);
     tooltipRef.current = tooltip;
 
-    // Crosshair move handler
     chart.subscribeCrosshairMove((param) => {
-      if (!param.point || !param.time || !tooltip) {
+      if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
         tooltip.style.display = "none";
         return;
       }
-      const dp = param.seriesData.get(candleSeries);
-      if (!dp) {
+      const data = param.seriesData.get(candleSeries) as {
+        open: number; high: number; low: number; close: number;
+      } | undefined;
+      if (!data) {
         tooltip.style.display = "none";
         return;
       }
-      const c = dp as {
-        open?: number;
-        high?: number;
-        low?: number;
-        close?: number;
-      };
-      const d = new Date((param.time as number) * 1000).toLocaleDateString(
-        "en-US",
-        { month: "short", day: "numeric", year: "numeric" }
-      );
-
-      const dayEvents = (eventsRef.current || []).filter(
-        (e: MacroEvent) =>
-          Math.abs(e.timestamp - (param.time as number)) < 43200
-      );
-      const eh = dayEvents.length
-        ? dayEvents
-            .map((e: MacroEvent) => {
-              const s = IMPACT_STYLE[e.impact_level];
-              return `<div style="color:${s.color};margin-top:3px;font-size:10px;">${e.title}${e.actual_value ? ` (${e.actual_value}${e.unit})` : ""}</div>`;
-            })
-            .join("")
-        : "";
-
-      const dayNews = MOCK_NEWS.filter(
-        (n) => Math.abs(n.timestamp - (param.time as number)) < 86400
-      );
-      const nh = dayNews.length
-        ? `<div style="margin-top:6px;border-top:1px solid #2d3a52;padding-top:4px;"><div style="font-size:9px;color:#8b5cf6;font-weight:700;margin-bottom:2px;">📰 NEWS</div>${dayNews
-            .map(
-              (n) =>
-                `<div style="color:${n.sentiment === "bullish" ? "#22c55e" : n.sentiment === "bearish" ? "#ef4444" : "#94a3b8"};font-size:10px;margin-top:2px;">${n.title}</div>`
-            )
-            .join("")}</div>`
-        : "";
-
-      const activeSignals = Array.from(
-        strategyOutputsRef.current?.values() || []
-      )
-        .flatMap((o) => o.signals)
-        .filter(
-          (s: StrategySignal) =>
-            Math.abs(s.time - (param.time as number)) < 86400
-        );
-      const sh = activeSignals.length
-        ? `<div style="margin-top:6px;border-top:1px solid #2d3a52;padding-top:4px;"><div style="font-size:9px;color:#eab308;font-weight:700;margin-bottom:2px;">📈 STRATEGY</div>${activeSignals
-            .map(
-              (s: StrategySignal) =>
-                `<div style="color:${s.direction === "buy" ? "#22c55e" : "#ef4444"};font-size:10px;">${s.label} (${s.direction.toUpperCase()})</div>`
-            )
-            .join("")}</div>`
-        : "";
-
       tooltip.innerHTML = `
-        <div style="font-weight:700;margin-bottom:3px;color:#3b82f6;">${d}</div>
-        <div>O: $${c.open?.toLocaleString()}</div>
-        <div>H: <span style="color:${t.up}">$${c.high?.toLocaleString()}</span></div>
-        <div>L: <span style="color:${t.down}">$${c.low?.toLocaleString()}</span></div>
-        <div>C: <span style="color:${c.close! >= c.open! ? t.up : t.down};font-weight:700">$${c.close?.toLocaleString()}</span></div>
-        ${eh}${nh}${sh}
+        <div style="font-weight:bold;margin-bottom:4px;">${new Date(
+          (param.time as number) * 1000
+        ).toLocaleString()}</div>
+        <div>O: ${data.open.toFixed(2)} H: ${data.high.toFixed(2)}</div>
+        <div>L: ${data.low.toFixed(2)} C: ${data.close.toFixed(2)}</div>
       `;
       tooltip.style.display = "block";
       tooltip.style.left =
@@ -257,16 +176,16 @@ export default function ChartCanvas({
         Math.min(param.point.y + 12, container.clientHeight - 260) + "px";
     });
 
-    // Click handler
     chart.subscribeClick((param) => {
       if (!param.time) return;
       const evts = eventsRef.current || [];
       const clicked = evts.find(
         (e) => Math.abs(e.timestamp - (param.time as number)) < 86400
       );
-      if (clicked) onEventClick(clicked.id, clicked.timestamp);
+      if (clicked) onEventClickRef.current(clicked.id, clicked.timestamp);
     });
 
+    // chart initialized once; onEventClick consumed via ref for stable handler identity
     return () => {
       tooltip.remove();
       chart.remove();
@@ -276,34 +195,53 @@ export default function ChartCanvas({
       highlightRef.current = null;
       tooltipRef.current = null;
     };
-  }, [onEventClick]);
+  }, []);
+
+  // Expose chart API via ref to parent
+  // Use getters so the ref dynamically reads current values
+  // (chartRef etc. are set in useEffect after mount, so static values would be null)
+  useImperativeHandle(ref, () => ({
+    get chart() { return chartRef.current; },
+    get candleSeries() { return candleRef.current; },
+    get volumeSeries() { return volumeRef.current; },
+    get highlightSeries() { return highlightRef.current; },
+    get container() { return containerRef.current; },
+  }), []);
+
+  // Memoized data transformations
+  const candleData = useMemo(() => klines.map((k) => ({
+    time: k.time as Time,
+    open: k.open,
+    high: k.high,
+    low: k.low,
+    close: k.close,
+  })), [klines, dataVersion]);
+
+  const volumeData = useMemo(() => {
+    const t = THEME;
+    return klines.map((k) => ({
+      time: k.time as Time,
+      value: k.volume,
+      color: k.close >= k.open ? `${t.up}30` : `${t.down}30`,
+    }));
+  }, [klines, dataVersion]);
+
+  const markers = useMemo(() => {
+    const histFactors = events.filter((f) => !f.is_forecast);
+    return buildMarkers(histFactors, klines, [], []);
+  }, [events, klines, dataVersion]);
 
   // Update data when klines/events change
   useEffect(() => {
     if (!chartRef.current || !candleRef.current || !volumeRef.current) return;
 
-    const t = THEME;
-    const candleData = klines.map((k) => ({
-      time: k.time as Time,
-      open: k.open,
-      high: k.high,
-      low: k.low,
-      close: k.close,
-    }));
-    const volumeData = klines.map((k) => ({
-      time: k.time as Time,
-      value: k.volume,
-      color: k.close >= k.open ? `${t.up}30` : `${t.down}30`,
-    }));
-
     candleRef.current.setData(candleData);
     volumeRef.current.setData(volumeData);
     chartRef.current.priceScale("right").applyOptions({ autoScale: true });
 
-    // Update markers
-    const histFactors = events.filter((f) => !f.is_forecast);
-    const markers = buildMarkers(histFactors, klines, [], []);
-    if (markers.length && candleRef.current) {
+    if (markers.length) {
+      // lightweight-charts v4.2 type defs omit setMarkers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (candleRef.current as any).setMarkers?.(markers);
     }
 
@@ -317,9 +255,12 @@ export default function ChartCanvas({
     requestAnimationFrame(() => {
       chartRef.current?.timeScale().fitContent();
     });
-  }, [klines, events, timeframe]);
+  }, [candleData, volumeData, markers, timeframe]);
 
   // Update highlight on hover
+  // 移动端触摸手势支持
+  useTouchGestures({ chart: chartRef.current, container: containerRef.current });
+
   const hoverTimestamp = useAppStore((s) => s.hoverTimestamp);
   useEffect(() => {
     if (!chartRef.current || !highlightRef.current || !klines.length) return;
@@ -397,7 +338,9 @@ export default function ChartCanvas({
       style={{ background: THEME.bg }}
     />
   );
-}
+});
+
+export default ChartCanvas;
 
 // Helper: build markers from events
 function buildMarkers(

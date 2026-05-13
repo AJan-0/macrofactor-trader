@@ -19,7 +19,7 @@ export default function MobileNav({ active, onChange }: Props) {
   const isZh = locale === "zh";
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e1a] border-t border-[#1e293b]">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e1a] border-t border-[#1e293b] pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around h-[56px]">
         {TABS.map(tab => {
           const isActive = active === tab.key;
@@ -27,11 +27,11 @@ export default function MobileNav({ active, onChange }: Props) {
             <button
               key={tab.key}
               onClick={() => onChange(tab.key)}
-              className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
+              className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full active:scale-95 transition-transform"
             >
               <span className="text-[16px] leading-none">{tab.icon}</span>
               <span
-                className={`text-[10px] leading-none ${
+                className={`text-xs leading-none ${
                   isActive ? "text-[#3b82f6] font-bold" : "text-[#475569]"
                 }`}
               >

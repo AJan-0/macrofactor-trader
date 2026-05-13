@@ -11,7 +11,7 @@ Usage:
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Coroutine, List, Optional, Set
+from typing import Any, Callable, Optional, Set
 
 try:
     import websockets
@@ -22,15 +22,13 @@ except ImportError:
     websockets = None
     WebSocketClientProtocol = None
 
-# Callback type: async (symbol, timeframe, candle_dict) → None
-CandleCallback = Callable[[str, str, dict], Coroutine[Any, Any, None]]
-
 logger = logging.getLogger(__name__)
 
 # OKX WebSocket URLs (public channel, no auth needed)
 _OKX_WS_URLS = [
     "wss://ws.okx.com:8443/ws/v5/public",
     "wss://ws.okx.com:10443/ws/v5/public",
+    "wss://wspap.okx.com:8443/ws/v5/public?brokerId=9999",
 ]
 
 # Map our timeframe format to OKX channel names
@@ -52,6 +50,13 @@ TIMEFRAME_CHANNEL_MAP = {
 # Reverse map: OKX channel suffix -> our timeframe
 _CHANNEL_TO_TIMEFRAME = {v: k for k, v in TIMEFRAME_CHANNEL_MAP.items()}
 
+# 生产级配置
+_MAX_RECONNECT_ATTEMPTS = 20  # 最大重连次数
+_RECONNECT_BASE = 1.0
+_RECONNECT_MAX = 30.0
+_PING_INTERVAL = 25.0  # OKX 要求 30s 内发送 ping
+_PONG_TIMEOUT = 10.0
+
 
 class OKXWebSocketClient:
     """Manages OKX WebSocket connection and dispatches candle updates.
@@ -60,31 +65,25 @@ class OKXWebSocketClient:
         1. Call `start()` → connects to OKX, listens for messages.
         2. Call `subscribe(symbol, tf)` → sends subscribe msg, adds to active set.
         3. On candle data → calls `self.on_candle_update(symbol, tf, candle_dict)`.
-        4. On disconnect → auto-reconnects with exponential backoff.
+        4. On disconnect → auto-reconnects with exponential backoff (最多 20 次).
     """
 
-    def __init__(self, on_candle_update: Optional[CandleCallback] = None) -> None:
+    def __init__(self, on_candle_update: Callable[[str, str, dict], Any]) -> None:
         if not _HAS_WEBSOCKETS:
             raise RuntimeError(
                 "websockets package not installed. "
                 "Run: pip install websockets"
             )
-        self._listeners: List[CandleCallback] = []
-        if on_candle_update is not None:
-            self._listeners.append(on_candle_update)
+        self.on_candle_update = on_candle_update
         self._ws: Optional[WebSocketClientProtocol] = None
         self._subscriptions: Set[str] = set()  # "{symbol}|{timeframe}"
         self._running = False
-        self._reconnect_delay: float = 1.0
+        self._reconnect_delay: float = _RECONNECT_BASE
+        self._reconnect_attempts: int = 0
         self._task: Optional[asyncio.Task] = None
-
-    def add_listener(self, callback: CandleCallback) -> None:
-        """Add an additional async callback to receive candle updates.
-
-        Multiple consumers (broadcaster, alert monitor, etc.) can subscribe
-        to the same OKX WebSocket stream.
-        """
-        self._listeners.append(callback)
+        self._url_index: int = 0
+        self._ping_task: Optional[asyncio.Task] = None
+        self._last_pong_time: float = 0.0
 
     async def start(self) -> None:
         """Start the connection loop (runs forever until `stop()` is called)."""
@@ -93,20 +92,45 @@ class OKXWebSocketClient:
             try:
                 await self._connect_and_listen()
             except Exception as exc:
+                if not self._running:
+                    break
+                self._reconnect_attempts += 1
+                if self._reconnect_attempts > _MAX_RECONNECT_ATTEMPTS:
+                    logger.error(
+                        "OKX WS: max reconnect attempts (%d) reached. Giving up.",
+                        _MAX_RECONNECT_ATTEMPTS,
+                    )
+                    self._running = False
+                    break
                 logger.error("OKX WS connection error: %s", exc)
                 await asyncio.sleep(self._reconnect_delay)
-                self._reconnect_delay = min(self._reconnect_delay * 2, 30.0)
-                logger.info("Reconnecting in %.1fs...", self._reconnect_delay)
+                self._reconnect_delay = min(self._reconnect_delay * 2, _RECONNECT_MAX)
+                logger.info(
+                    "OKX WS: reconnecting in %.1fs... (attempt %d/%d)",
+                    self._reconnect_delay,
+                    self._reconnect_attempts,
+                    _MAX_RECONNECT_ATTEMPTS,
+                )
+
+    def _get_next_url(self) -> str:
+        url = _OKX_WS_URLS[self._url_index % len(_OKX_WS_URLS)]
+        self._url_index += 1
+        return url
 
     async def _connect_and_listen(self) -> None:
         """Single connection lifecycle."""
-        ws_url = _OKX_WS_URLS[0]
+        ws_url = self._get_next_url()
         logger.info("OKX WS: connecting to %s", ws_url)
 
         async with websockets.connect(ws_url) as ws:  # type: ignore[union-attr]
             self._ws = ws
-            self._reconnect_delay = 1.0
+            self._reconnect_delay = _RECONNECT_BASE
+            self._reconnect_attempts = 0
+            self._last_pong_time = asyncio.get_event_loop().time()
             logger.info("OKX WS: connected")
+
+            # 启动心跳
+            self._ping_task = asyncio.create_task(self._ping_loop(ws))
 
             # Re-subscribe to all active subscriptions after reconnect
             for sub_key in list(self._subscriptions):
@@ -117,11 +141,36 @@ class OKXWebSocketClient:
             async for raw in ws:
                 await self._handle_message(raw)
 
+    async def _ping_loop(self, ws: WebSocketClientProtocol) -> None:
+        """定期发送 ping，检测连接健康。"""
+        while self._running and self._ws is ws:
+            try:
+                await asyncio.sleep(_PING_INTERVAL)
+                if self._ws is not ws or not ws.open:
+                    break
+                await ws.send(json.dumps({"op": "ping"}))
+                # 检查上次 pong 时间
+                now = asyncio.get_event_loop().time()
+                if now - self._last_pong_time > _PING_INTERVAL + _PONG_TIMEOUT:
+                    logger.warning("OKX WS: pong timeout, closing connection")
+                    await ws.close()
+                    break
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.debug("OKX WS ping error: %s", exc)
+                break
+
     async def _handle_message(self, raw: str) -> None:
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError:
             logger.warning("OKX WS: invalid JSON: %s", raw[:200])
+            return
+
+        # --- Heartbeat pong ---
+        if payload.get("op") == "pong" or payload.get("event") == "pong":
+            self._last_pong_time = asyncio.get_event_loop().time()
             return
 
         # --- Candle data ---
@@ -170,13 +219,9 @@ class OKXWebSocketClient:
         candle_dict["is_new"] = not candle_dict["confirm"]
 
         try:
-            for listener in self._listeners:
-                try:
-                    await listener(inst_id, timeframe, candle_dict)
-                except Exception as exc:
-                    logger.warning("candle listener failed: %s", exc)
+            await self.on_candle_update(inst_id, timeframe, candle_dict)
         except Exception as exc:
-            logger.warning("candle dispatch failed: %s", exc)
+            logger.warning("on_candle_update callback failed: %s", exc)
 
     async def subscribe(self, symbol: str, timeframe: str) -> None:
         """Subscribe to real-time candle updates for one symbol/timeframe."""
@@ -220,6 +265,13 @@ class OKXWebSocketClient:
     async def stop(self) -> None:
         """Gracefully stop and close the WebSocket."""
         self._running = False
+        if self._ping_task is not None:
+            self._ping_task.cancel()
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
+            self._ping_task = None
         if self._ws is not None:
             await self._ws.close()
             self._ws = None

@@ -20,13 +20,26 @@ WebSocket 实时 K 线:
 import asyncio
 import json
 import logging
-import time, uuid
+import os
+import time
 from contextlib import asynccontextmanager
-from typing import Any, Optional, Dict
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    _HAS_SLOWAPI = True
+except ImportError:
+    _HAS_SLOWAPI = False
+    Limiter = None  # type: ignore[misc,assignment]
+    _rate_limit_exceeded_handler = None  # type: ignore[misc,assignment]
+    RateLimitExceeded = None  # type: ignore[misc,assignment]
 
 from models import (
     AssetSymbol,
@@ -49,17 +62,12 @@ from services.cache_backends import create_cache_backend, ICacheBackend
 from services.cache_config import cache_settings
 from database import init_db, close_db, get_db
 from services.sync_service import sync_all, query_events_from_db
+from services.okx_client import close_okx_client
+from config import get_settings
 
 # v0.4.0 新增: OKX WebSocket 实时 K 线推送
 from services.okx_ws import OKXWebSocketClient
 from services.kline_broadcaster import KlineBroadcaster
-
-# v0.4.0 预警系统
-from services.alert_store import AlertStore, AlertConfigDTO
-from services.alert_monitor import AlertMonitor
-from database import AsyncSessionLocal as _AsyncSessionLocal
-from datetime import datetime as _datetime
-from pydantic import BaseModel as PydanticBaseModel, Field
 
 # ──────────────────────────────
 # 日志配置
@@ -82,23 +90,6 @@ _cache: ICacheBackend | None = None
 _broadcaster: KlineBroadcaster | None = None
 _okx_ws: OKXWebSocketClient | None = None
 _okx_ws_task: asyncio.Task | None = None
-
-# v0.4.0 预警系统
-_alert_store: AlertStore | None = None
-_alert_monitor: AlertMonitor | None = None
-
-
-async def _on_alert_triggered(alert_id: str) -> None:
-    """后台任务: 将预警触发记录持久化到数据库。"""
-    if _alert_store is None:
-        return
-    try:
-        async with _AsyncSessionLocal() as session:
-            await _alert_store.mark_triggered(session, alert_id)
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            "Alert DB persist failed for %s: %s", alert_id, exc,
-        )
 
 
 # ──────────────────────────────
@@ -183,22 +174,6 @@ async def lifespan(app: FastAPI):
         _broadcaster = None
         _okx_ws = None
 
-    # ── 5. [v0.4.0] 预警系统 ──
-    try:
-        global _alert_store, _alert_monitor
-        _alert_store = AlertStore()
-        _alert_monitor = AlertMonitor(store=_alert_store)
-        _alert_monitor.set_on_trigger(_on_alert_triggered)
-        await _alert_monitor.refresh_configs()
-        if _okx_ws is not None:
-            _okx_ws.add_listener(_alert_monitor.on_candle)
-        logger.info(
-            "Alert monitor ready — %d alerts loaded (price_cross, reversal, multi_tf)",
-            len(_alert_monitor.get_cached_configs()),
-        )
-    except Exception as exc:
-        logger.warning("Alert monitor init failed (non-fatal): %s", exc)
-
     yield
 
     # ── Shutdown ──
@@ -218,6 +193,14 @@ async def lifespan(app: FastAPI):
     if _cache is not None:
         await _cache.close()
         logger.info("Cache backend closed")
+
+    # 关闭 OKX HTTP 连接池
+    try:
+        await close_okx_client()
+        logger.info("OKX HTTP client closed")
+    except Exception as exc:
+        logger.warning("OKX HTTP client close error: %s", exc)
+
     await close_db()
     logger.info("Database connections closed")
 
@@ -226,6 +209,17 @@ async def lifespan(app: FastAPI):
 # FastAPI 实例
 # ──────────────────────────────
 
+# 限流器初始化（如 slowapi 未安装则提供 no-op fallback）
+if _HAS_SLOWAPI:
+    limiter = Limiter(key_func=get_remote_address)
+else:
+    class _DummyLimiter:
+        def limit(self, _rate: str):
+            def decorator(func):
+                return func
+            return decorator
+    limiter = _DummyLimiter()  # type: ignore[assignment]
+
 app = FastAPI(
     title="MacroFactor Trader API",
     description="宏观因子与资产价格可视化面板 — 后端服务 (v0.4.0 实时K线推送)",
@@ -233,15 +227,67 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 配置（开发环境开放，生产环境应收窄）
+if _HAS_SLOWAPI and limiter is not None:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+# CORS 配置（开发环境开放，生产环境必须收紧）
+_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_settings.cors_origins_list,
+    allow_credentials=_settings.cors_origins == "*" or len(_settings.cors_origins_list) > 0,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     expose_headers=["X-Cache-Status", "X-Cache-Stale"],
 )
+
+# ──────────────────────────────
+# 全局异常处理器
+# ──────────────────────────────
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "INTERNAL_ERROR",
+            "message": "An unexpected error occurred. Please try again later.",
+            "path": str(request.url.path),
+        },
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": f"HTTP_{exc.status_code}",
+            "message": exc.detail,
+            "path": str(request.url.path),
+        },
+    )
+
+
+# ──────────────────────────────
+# 管理端点认证依赖
+# ──────────────────────────────
+
+async def verify_admin_key(request: Request) -> None:
+    settings = get_settings()
+    if not settings.admin_key_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin API key not configured",
+        )
+    header_key = request.headers.get("X-Admin-API-Key", "")
+    query_key = request.query_params.get("admin_key", "")
+    if header_key != settings.admin_api_key and query_key != settings.admin_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing admin API key",
+        )
 
 
 # ──────────────────────────────
@@ -264,20 +310,13 @@ async def health_check() -> dict[str, Any]:
         "connected_clients": len(_broadcaster._clients) if _broadcaster else 0,
     }
 
-    alert_info: dict[str, Any] = {
-        "enabled": _alert_monitor is not None,
-        "active_configs": len(_alert_monitor.get_cached_configs()) if _alert_monitor else 0,
-        "ws_clients": len(_alert_monitor._ws_clients) if _alert_monitor else 0,
-    }
-
     return {
         "status": "ok",
         "service": "macrofactor-trader-api",
         "version": "0.4.0",
-        "features": ["klines", "events", "db_persistence", "cache_layer", "realtime_ws", "alert_engine"],
+        "features": ["klines", "events", "db_persistence", "cache_layer", "realtime_ws"],
         "cache": cache_info,
         "websocket": ws_info,
-        "alerts": alert_info,
     }
 
 
@@ -384,6 +423,7 @@ async def ws_klines(websocket: WebSocket) -> None:
     summary="获取加密货币 K 线数据（带缓存）",
     description="从 OKX 交易所获取 K 线数据，自动使用缓存加速。首次请求 ~500ms，二次请求 ~1ms。",
 )
+@limiter.limit("60/minute")
 async def fetch_klines(
     response: Response,
     symbol: AssetSymbol = Query(
@@ -461,6 +501,7 @@ async def fetch_klines(
     tags=["Macro Events"],
     summary="获取宏观经济事件列表（数据库驱动）",
 )
+@limiter.limit("60/minute")
 async def fetch_macro_events(
     category: EventCategory | None = Query(default=None),
     impact: ImpactLevel | None = Query(default=None),
@@ -499,7 +540,9 @@ async def fetch_macro_events(
     "/api/cache/clear",
     tags=["Admin"],
     summary="清除 K 线缓存",
+    dependencies=[Depends(verify_admin_key)],
 )
+@limiter.limit("10/minute")
 async def clear_cache(
     symbol: str | None = Query(default=None),
     timeframe: str | None = Query(default=None),
@@ -530,7 +573,9 @@ async def clear_cache(
     "/api/sync",
     tags=["Admin"],
     summary="手动触发数据同步",
+    dependencies=[Depends(verify_admin_key)],
 )
+@limiter.limit("10/minute")
 async def trigger_sync() -> dict[str, Any]:
     """手动触发全量数据同步。"""
     try:
@@ -545,199 +590,6 @@ async def trigger_sync() -> dict[str, Any]:
     except Exception as exc:
         logger.error("Manual sync failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
-
-
-# ──────────────────────────────
-# 预警系统 API (v0.4.0)
-# ──────────────────────────────
-
-class _AlertCreate(PydanticBaseModel):
-    symbol: str = Field(..., min_length=1, description="e.g. BTC-USDT")
-    alert_type: str = Field(..., pattern="^(price_cross|reversal|multi_tf)$")
-    params: dict = Field(..., description="Type-specific parameters (see docs)")
-    cooldown_minutes: int = Field(default=30, ge=1)
-
-
-class _AlertUpdate(PydanticBaseModel):
-    enabled: Optional[bool] = None
-    params: Optional[dict] = None
-    cooldown_minutes: Optional[int] = Field(default=None, ge=1)
-
-
-@app.post("/api/alerts", tags=["Alerts"], status_code=201)
-async def create_alert(
-    req: _AlertCreate,
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Create a new alert configuration."""
-    if _alert_store is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    dto = AlertConfigDTO(
-        id=str(uuid.uuid4()),
-        symbol=req.symbol,
-        alert_type=req.alert_type,
-        enabled=True,
-        params=req.params,
-        cooldown_minutes=req.cooldown_minutes,
-        created_at=_datetime.utcnow(),
-        updated_at=_datetime.utcnow(),
-    )
-    dto = await _alert_store.create(db, dto)
-    if _alert_monitor:
-        await _alert_monitor.refresh_configs()
-    return dto.to_dict()
-
-
-@app.get("/api/alerts", tags=["Alerts"])
-async def list_alerts(
-    symbol: str | None = Query(default=None),
-    use_cache: bool = Query(default=True, description="Use in-memory cache (faster)"),
-) -> dict[str, Any]:
-    """List all alerts, optionally filtered by symbol."""
-    if _alert_store is None or _alert_monitor is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    if use_cache:
-        configs = _alert_monitor.get_cached_configs()
-        if symbol:
-            configs = [c for c in configs if c.symbol == symbol.upper()]
-    else:
-        async with _AsyncSessionLocal() as session:
-            configs = await _alert_store.get_all(session, symbol=symbol)
-
-    return {"count": len(configs), "alerts": [c.to_dict() for c in configs]}
-
-
-@app.get("/api/alerts/{alert_id}", tags=["Alerts"])
-async def get_alert(alert_id: str) -> dict[str, Any]:
-    """Get a single alert by ID."""
-    if _alert_monitor is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-    cfg = await _alert_monitor.get_cached_by_id(alert_id)
-    if cfg is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    return cfg.to_dict()
-
-
-@app.put("/api/alerts/{alert_id}", tags=["Alerts"])
-async def update_alert(
-    alert_id: str,
-    req: _AlertUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Update an alert (enable/disable, change params, cooldown)."""
-    if _alert_store is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    updates: dict[str, Any] = {}
-    if req.enabled is not None:
-        updates["enabled"] = req.enabled
-    if req.params is not None:
-        updates["params"] = req.params
-    if req.cooldown_minutes is not None:
-        updates["cooldown_minutes"] = req.cooldown_minutes
-    if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
-
-    updates["updated_at"] = _datetime.utcnow()
-
-    dto = await _alert_store.update(db, alert_id, updates)
-    if dto is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    if _alert_monitor:
-        await _alert_monitor.refresh_configs()
-    return dto.to_dict()
-
-
-@app.delete("/api/alerts/{alert_id}", tags=["Alerts"])
-async def delete_alert(
-    alert_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, bool]:
-    """Delete an alert configuration."""
-    if _alert_store is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-    ok = await _alert_store.delete(db, alert_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    if _alert_monitor:
-        await _alert_monitor.refresh_configs()
-    return {"deleted": True}
-
-
-@app.post("/api/alerts/{alert_id}/test", tags=["Alerts"])
-async def test_alert(
-    alert_id: str,
-    candle: dict = Body(default=None),
-) -> dict[str, Any]:
-    """Test if an alert would trigger with a given candle (or defaults)."""
-    if _alert_monitor is None:
-        raise HTTPException(status_code=503, detail="Alert service not available")
-
-    cfg = await _alert_monitor.get_cached_by_id(alert_id)
-    if cfg is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    test_candle = candle or {
-        "symbol": cfg.symbol,
-        "timeframe": cfg.params.get("timeframe", "15m"),
-        "time": int(time.time()),
-        "open": 0, "high": 0, "low": 0, "close": 0, "volume": 0,
-        "confirm": True, "is_new": False,
-    }
-
-    triggered = await _alert_monitor.check_with_configs(
-        [cfg], cfg.symbol, test_candle.get("timeframe", "15m"), test_candle,
-    )
-
-    return {
-        "alert_id": alert_id,
-        "alert_type": cfg.alert_type,
-        "would_trigger": len(triggered) > 0,
-        "details": triggered[0] if triggered else None,
-    }
-
-
-# ──────────────────────────────
-# 预警 WebSocket 实时推送 (v0.4.0)
-# ──────────────────────────────
-
-@app.websocket("/ws/alerts")
-async def ws_alerts(websocket: WebSocket) -> None:
-    """WebSocket: 实时预警事件推送。
-
-    服务端 → 客户端:
-        {"type": "connected", "message": "Alert stream active", "active_alerts": N}
-        {"type": "alert", "alert_id": "...", "alert_type": "price_cross",
-         "symbol": "BTC-USDT", "timeframe": "15m", "time": 1716000000,
-         "price": 65000.5, "message": "...", "params": {...}}
-    """
-    if _alert_monitor is None:
-        await websocket.close(code=1013, reason="Alert service not available")
-        return
-
-    await websocket.accept()
-    _alert_monitor.add_ws_client(websocket)
-    await websocket.send_text(json.dumps({
-        "type": "connected",
-        "message": "Alert stream active",
-        "active_alerts": len(_alert_monitor.get_cached_configs()),
-    }))
-    logger.info("Alert WS client connected")
-
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            msg = json.loads(raw) if raw else {}
-            if msg.get("type") == "ping":
-                await websocket.send_text(json.dumps({"type": "pong"}))
-    except WebSocketDisconnect:
-        pass
-    except Exception as exc:
-        logger.warning("Alert WS client error: %s", exc)
-    finally:
-        _alert_monitor.remove_ws_client(websocket)
 
 
 # ──────────────────────────────
