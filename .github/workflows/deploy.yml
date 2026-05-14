@@ -65,13 +65,18 @@ jobs:
           set -e
           cd /var/www/ajan03.xyz/backend
           chown -R www-data:www-data /var/www/ajan03.xyz
-          # Ensure Python venv module is available
-          if ! python3.11 -m venv --help &>/dev/null && ! python3 -m venv --help &>/dev/null; then
-              sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv python3.11-venv
+          # Find available Python
+          PYTHON_CMD=$(command -v python3.11 || command -v python3 || command -v python)
+          echo "Using Python: $PYTHON_CMD"
+          # Ensure venv module is available
+          if ! $PYTHON_CMD -m venv --help &>/dev/null; then
+              apt-get update -qq
+              apt-get install -y -qq python3-venv python3.11-venv 2>/dev/null || apt-get install -y -qq python3-venv
           fi
           # Create venv if missing
-          if [[ ! -d venv ]]; then
-              python3.11 -m venv venv 2>/dev/null || python3 -m venv venv
+          if [[ ! -f venv/bin/activate ]]; then
+              rm -rf venv
+              $PYTHON_CMD -m venv venv
           fi
           source venv/bin/activate
           pip install --upgrade pip
