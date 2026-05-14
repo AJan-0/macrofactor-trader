@@ -65,7 +65,12 @@ jobs:
           set -e
           cd /var/www/ajan03.xyz/backend
           chown -R www-data:www-data /var/www/ajan03.xyz
+          # Ensure venv exists
+          if [[ ! -d venv ]]; then
+            python3.11 -m venv venv || python3 -m venv venv
+          fi
           source venv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
           sudo systemctl restart macrofactor-backend || true
           sleep 3
