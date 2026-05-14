@@ -59,49 +59,48 @@ jobs:
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/ajan03.xyz/backend/
 
       # ── 7. Fix permissions & Restart Backend Service ──
-       # ── 7. Fix permissions & Restart Backend Service ──
-       - name: Install backend deps & restart service
-         run: |
-           ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<'EOF'
-           set -e
-           cd /var/www/ajan03.xyz/backend
-           chown -R www-data:www-data /var/www/ajan03.xyz
-           
-           # 查找可用的 Python 解释器（改进版本）
-           PYTHON_CMD=""
-           for python_version in python3.11 python3 python; do
-             if command -v "$python_version" &>/dev/null; then
-               PYTHON_CMD="$python_version"
-               break
-             fi
-           done
-           
-           # 验证 Python 是否找到
-           if [ -z "$PYTHON_CMD" ]; then
-             echo "错误: 找不到 Python 解释器"
-             apt-get update -qq
-             apt-get install -y python3 python3-venv
-             PYTHON_CMD="python3"
-           fi
-           
-           echo "使用 Python: $PYTHON_CMD"
-           
-           # 确保 venv 模块可用
-           if ! $PYTHON_CMD -m venv --help &>/dev/null; then
-               apt-get update -qq
-               apt-get install -y -qq python3-venv python3.11-venv 2>/dev/null || apt-get install -y -qq python3-venv
-           fi
-           
-           # 重新创建虚拟环境
-           rm -rf venv
-           $PYTHON_CMD -m venv venv
-           source venv/bin/activate
-           pip install --upgrade pip
-           pip install -r requirements.txt
-           sudo systemctl restart macrofactor-backend || true
-           sleep 3
-           sudo systemctl status macrofactor-backend --no-pager || true
-           EOF
+      - name: Install backend deps & restart service
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<'EOF'
+          set -e
+          cd /var/www/ajan03.xyz/backend
+          chown -R www-data:www-data /var/www/ajan03.xyz
+
+          # 查找可用的 Python 解释器（改进版本）
+          PYTHON_CMD=""
+          for python_version in python3.11 python3 python; do
+            if command -v "$python_version" &>/dev/null; then
+              PYTHON_CMD="$python_version"
+              break
+            fi
+          done
+
+          # 验证 Python 是否找到
+          if [ -z "$PYTHON_CMD" ]; then
+            echo "错误: 找不到 Python 解释器"
+            apt-get update -qq
+            apt-get install -y python3 python3-venv
+            PYTHON_CMD="python3"
+          fi
+
+          echo "使用 Python: $PYTHON_CMD"
+
+          # 确保 venv 模块可用
+          if ! $PYTHON_CMD -m venv --help &>/dev/null; then
+            apt-get update -qq
+            apt-get install -y -qq python3-venv python3.11-venv 2>/dev/null || apt-get install -y -qq python3-venv
+          fi
+
+          # 重新创建虚拟环境
+          rm -rf venv
+          $PYTHON_CMD -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo systemctl restart macrofactor-backend || true
+          sleep 3
+          sudo systemctl status macrofactor-backend --no-pager || true
+          EOF
 
       # ── 8. Health Check ──
       - name: Health check
