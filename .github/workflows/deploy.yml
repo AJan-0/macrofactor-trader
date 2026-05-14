@@ -1,47 +1,80 @@
-name: Deploy to GitHub Pages
+name: Deploy Fullstack to Aliyun ECS
 
 on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      # ── 1. Checkout ──
+      - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Setup Node
+
+      # ── 2. Setup Node.js ──
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      
+          cache: 'npm'
+
+      # ── 3. Install & Build Frontend ──
       - name: Install dependencies
         run: npm ci
-      
-      - name: Build
+
+      - name: Build frontend
         run: npm run build
-      
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+
+      # ── 4. Setup SSH ──
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          path: './dist'
-      
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+          log-public-key: false
+
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      # ── 5. Deploy Frontend (dist/) ──
+      - name: Deploy frontend to Aliyun ECS
+        run: |
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./dist/ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/ajan03.xyz/frontend/
+
+      # ── 6. Deploy Backend ──
+      - name: Deploy backend to Aliyun ECS
+        run: |
+          rsync -avz --delete \
+            --exclude='venv' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.env' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./backend/ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/ajan03.xyz/backend/
+
+      # ── 7. Restart Backend Service ──
+      - name: Install backend deps & restart service
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'REMOTE_EOF'
+            set -e
+            cd /var/www/ajan03.xyz/backend
+            source venv/bin/activate
+            pip install -r requirements.txt
+            sudo systemctl restart macrofactor-backend
+            sleep 2
+            sudo systemctl status macrofactor-backend --no-pager
+          REMOTE_EOF
+
+      # ── 8. Health Check ──
+      - name: Health check
+        run: |
+          echo "Waiting for service to start..."
+          sleep 5
+          curl -sf https://ajan03.xyz/api/health || echo "Health check failed (may need DNS propagation)"
