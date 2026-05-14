@@ -13,20 +13,7 @@
     <title>MacroFactor Trader</title>
   </head>
   <body>
-    <noscript>
-      <div style="padding:40px;text-align:center;color:#e2e8f0;font-family:system-ui;">
-        <h1>JavaScript 已禁用</h1>
-        <p>MacroFactor Trader 需要启用 JavaScript 才能运行。</p>
-      </div>
-    </noscript>
-    <div id="root">
-      <div id="loading-fallback" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0e1a;color:#94a3b8;font-family:system-ui,sans-serif;">
-        <div style="text-align:center;">
-          <div style="font-size:24px;margin-bottom:8px;">⚡</div>
-          <div style="font-size:14px;">MacroFactor Trader 加载中...</div>
-        </div>
-      </div>
-    </div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
