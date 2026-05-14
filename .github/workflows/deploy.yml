@@ -58,19 +58,19 @@ jobs:
             ./backend/ \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/ajan03.xyz/backend/
 
-      # ── 7. Restart Backend Service ──
+      # ── 7. Fix permissions & Restart Backend Service ──
       - name: Install backend deps & restart service
         run: |
-          ssh -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'REMOTE_EOF'
-            set -e
-            cd /var/www/ajan03.xyz/backend
-            source venv/bin/activate
-            pip install -r requirements.txt
-            sudo systemctl restart macrofactor-backend
-            sleep 2
-            sudo systemctl status macrofactor-backend --no-pager
-          REMOTE_EOF
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<'EOF'
+          set -e
+          cd /var/www/ajan03.xyz/backend
+          chown -R www-data:www-data /var/www/ajan03.xyz
+          source venv/bin/activate
+          pip install -r requirements.txt
+          sudo systemctl restart macrofactor-backend || true
+          sleep 3
+          sudo systemctl status macrofactor-backend --no-pager || true
+          EOF
 
       # ── 8. Health Check ──
       - name: Health check
