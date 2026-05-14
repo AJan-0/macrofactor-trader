@@ -11,6 +11,28 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
     <title>MacroFactor Trader</title>
+    <script>
+      window.__errors__ = [];
+      window.addEventListener('error', (e) => {
+        window.__errors__.push({
+          type: 'error',
+          message: e.message,
+          filename: e.filename,
+          lineno: e.lineno,
+          colno: e.colno,
+          time: new Date().toISOString()
+        });
+        console.error('[ERROR EVENT]', e.message);
+      }, true);
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errors__.push({
+          type: 'unhandledrejection',
+          reason: String(e.reason),
+          time: new Date().toISOString()
+        });
+        console.error('[REJECTION]', e.reason);
+      });
+    </script>
   </head>
   <body>
     <noscript>
@@ -27,6 +49,26 @@
         </div>
       </div>
     </div>
+    <script type="module">
+      setTimeout(() => {
+        const root = document.getElementById('root');
+        if (root && root.querySelector('#loading-fallback')) {
+          const errors = window.__errors__ || [];
+          if (errors.length > 0) {
+            root.innerHTML = `
+              <div style="padding:40px;color:#e2e8f0;font-family:monospace;background:#0a0e1a;min-height:100vh;overflow:auto;">
+                <h2 style="color:#ef4444;">⚠️ 应用加载失败</h2>
+                <p style="color:#94a3b8;">检测到以下错误：</p>
+                <div style="background:#111827;padding:16px;border-radius:8px;font-size:12px;border:1px solid #1e293b;">
+                  ${errors.map((e, i) => `<div style="margin-bottom:8px;color:#94a3b8;"><strong style="color:#ef4444;">${i + 1}. ${e.type}:</strong> ${e.message || e.reason || '未知错误'}</div>`).join('')}
+                </div>
+                <button onclick="location.reload()" style="margin-top:16px;padding:8px 16px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;">刷新页面</button>
+              </div>
+            `;
+          }
+        }
+      }, 8000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
