@@ -64,39 +64,49 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<'EOF'
           set -e
           cd /var/www/ajan03.xyz/backend
-          chown -R www-data:www-data /var/www/ajan03.xyz
+          sudo chown -R www-data:www-data /var/www/ajan03.xyz || true
 
-          # 查找可用的 Python 解释器（改进版本）
+          # 查找可用的 Python 解释器
           PYTHON_CMD=""
-          for python_version in python3.11 python3 python; do
+          for python_version in python3.12 python3.11 python3.10 python3 python; do
             if command -v "$python_version" &>/dev/null; then
               PYTHON_CMD="$python_version"
               break
             fi
           done
 
-          # 验证 Python 是否找到
           if [ -z "$PYTHON_CMD" ]; then
-            echo "错误: 找不到 Python 解释器"
-            apt-get update -qq
-            apt-get install -y python3 python3-venv
+            echo "错误: 找不到 Python 解释器，尝试安装..."
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq python3 python3-venv python3-full
             PYTHON_CMD="python3"
           fi
 
           echo "使用 Python: $PYTHON_CMD"
+          $PYTHON_CMD --version
 
-          # 确保 venv 模块可用
-          if ! $PYTHON_CMD -m venv --help &>/dev/null; then
-            apt-get update -qq
-            apt-get install -y -qq python3-venv python3.11-venv 2>/dev/null || apt-get install -y -qq python3-venv
+          # 关键修复：检测 ensurepip / venv 是否可用，不可用则安装对应系统包
+          if ! $PYTHON_CMD -m ensurepip --help &>/dev/null 2>&1 || ! $PYTHON_CMD -m venv --help &>/dev/null 2>&1; then
+            echo "ensurepip/venv 不可用，正在安装对应系统包..."
+            sudo apt-get update -qq
+            
+            # 获取当前 Python 版本号（如 3.12）
+            PY_MAJOR=$($PYTHON_CMD -c 'import sys; print(sys.version_info.major)')
+            PY_MINOR=$($PYTHON_CMD -c 'import sys; print(sys.version_info.minor)')
+            
+            # 优先安装对应版本的 venv 包（如 python3.12-venv）
+            sudo apt-get install -y -qq "python${PY_MAJOR}.${PY_MINOR}-venv" 2>/dev/null || true
+            # 兜底安装通用包
+            sudo apt-get install -y -qq python3-venv python3-full 2>/dev/null || true
           fi
 
-          # 重新创建虚拟环境
+          # 清理并重建虚拟环境
           rm -rf venv
           $PYTHON_CMD -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
+          
           sudo systemctl restart macrofactor-backend || true
           sleep 3
           sudo systemctl status macrofactor-backend --no-pager || true
