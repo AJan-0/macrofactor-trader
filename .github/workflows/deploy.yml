@@ -73,11 +73,9 @@ jobs:
               apt-get update -qq
               apt-get install -y -qq python3-venv python3.11-venv 2>/dev/null || apt-get install -y -qq python3-venv
           fi
-          # Create venv if missing
-          if [[ ! -f venv/bin/activate ]]; then
-              rm -rf venv
-              $PYTHON_CMD -m venv venv
-          fi
+          # Always recreate venv to ensure clean state
+          rm -rf venv
+          $PYTHON_CMD -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
