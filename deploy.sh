@@ -56,11 +56,9 @@ apt-get install -y \
 # 2. 安装 Python 3.11
 # ─────────────────────────────────────────────────────────────────────────────
 log "[2/10] 安装 Python $PYTHON_VERSION..."
-if ! command -v python3.11 &> /dev/null; then
-    add-apt-repository -y ppa:deadsnakes/ppa || true
-    apt-get update -y
-    apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip
-fi
+add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || true
+apt-get update -y
+apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip build-essential
 python3.11 --version
 
 # ─────────────────────────────────────────────────────────────────────────────
