@@ -38,14 +38,12 @@ function loadInitialFactorState(): FactorState {
 }
 
 export default function Dashboard() {
+  // ✅ 所有 hooks 必须在最顶部按照相同的顺序调用
   const events = useAppStore(s => s.events);
-
   const [{ factors, combo }, setFactorState] = useState<FactorState>(loadInitialFactorState);
   const [backtestRecords, setBacktestRecords] = useState<BacktestRecord[]>([]);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
   const [lastUpdate] = useState<string>(() => new Date().toLocaleTimeString());
-
-  // 移动端状态
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const [sheetOpen, setSheetOpen] = useState(false);
 
