@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo, useState, useCallback } from "react";
 import { useTouchGestures } from "@/hooks/useTouchGestures";
 import {
   createChart,
@@ -10,6 +10,7 @@ import {
 } from "lightweight-charts";
 import { useAppStore, type MacroEvent } from "@/store/appStore";
 import type { StrategyOutput } from "@/services/strategyEngine";
+import MobileChartControls from "./MobileChartControls";
 
 const THEME = {
   bg: "#111827",
@@ -265,12 +266,39 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     });
   }, [candleData, volumeData, markers, timeframe]);
 
-  // 移动端触摸手势支持 - 使用 ref 避免重复创建
-  const touchGestureRef = useRef({ chart: chartRef.current, container: containerRef.current });
-  useEffect(() => {
-    touchGestureRef.current = { chart: chartRef.current, container: containerRef.current };
-  }, []);
-  useTouchGestures(touchGestureRef.current);
+  // 移动端触摸手势支持 - TradingView 风格
+  const [longPressInfo, setLongPressInfo] = useState<{ time: number; price: number } | null>(null);
+  
+  useTouchGestures({
+    chart: chartRef.current,
+    container: containerRef.current,
+    enabled: true,
+    onLongPress: (time, price) => {
+      setLongPressInfo({ time, price });
+      // 3秒后自动隐藏
+      setTimeout(() => setLongPressInfo(null), 3000);
+    },
+    onDoubleTap: () => {
+      // 双击重置视图
+      chartRef.current?.timeScale().fitContent();
+    },
+  });
+
+  // 长按信息浮层
+  const longPressOverlay = longPressInfo && (
+    <div 
+      className="absolute z-50 pointer-events-none bg-[#1a2236] border border-[#2d3a52] rounded-lg px-3 py-2 shadow-xl"
+      style={{
+        left: '50%',
+        top: '20%',
+        transform: 'translateX(-50%)',
+      }}
+    >
+      <div className="text-[11px] text-[#94a3b8]">
+        {new Date(longPressInfo.time * 1000).toLocaleString()}
+      </div>
+    </div>
+  );
 
   const hoverTimestamp = useAppStore((s) => s.hoverTimestamp);
   useEffect(() => {
@@ -342,12 +370,59 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     }
   }, [activeTimestamp, klines]);
 
+  // 移动端图表控制
+  const [isCrosshairEnabled, setIsCrosshairEnabled] = useState(false);
+  
+  const handleZoomIn = useCallback(() => {
+    if (!chartRef.current) return;
+    const timeScale = chartRef.current.timeScale();
+    const currentSpacing = timeScale.options().barSpacing ?? 6;
+    timeScale.applyOptions({ barSpacing: Math.max(1, currentSpacing * 0.8) });
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (!chartRef.current) return;
+    const timeScale = chartRef.current.timeScale();
+    const currentSpacing = timeScale.options().barSpacing ?? 6;
+    timeScale.applyOptions({ barSpacing: Math.min(100, currentSpacing * 1.25) });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    chartRef.current?.timeScale().fitContent();
+  }, []);
+
+  const handleToggleCrosshair = useCallback(() => {
+    setIsCrosshairEnabled(prev => {
+      const next = !prev;
+      chartRef.current?.applyOptions({
+        crosshair: {
+          mode: next ? 1 : 0,
+          vertLine: { visible: next, labelVisible: next },
+          horzLine: { visible: next, labelVisible: next },
+        }
+      });
+      return next;
+    });
+  }, []);
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full min-h-[200px] lg:min-h-[400px] relative"
       style={{ background: THEME.bg }}
-    />
+    >
+      {longPressOverlay}
+      
+      {/* 移动端图表控制按钮 */}
+      <MobileChartControls
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onReset={handleReset}
+        onToggleCrosshair={handleToggleCrosshair}
+        isCrosshairEnabled={isCrosshairEnabled}
+        timeframe={timeframe}
+      />
+    </div>
   );
 });
 

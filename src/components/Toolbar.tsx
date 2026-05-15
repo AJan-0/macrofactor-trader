@@ -4,6 +4,7 @@ import { useAppStore } from "@/store/appStore";
 import { useI18n } from "@/i18n/context";
 import { useRealtimePrice } from "@/services/priceStream";
 import { useIsMobile } from "@/hooks/use-mobile";
+import MobileTimeframeSelector from "./chart/MobileTimeframeSelector";
 
 const Toolbar = memo(function Toolbar() {
   const { t, locale, setLocale } = useI18n();
@@ -80,10 +81,19 @@ const Toolbar = memo(function Toolbar() {
             </div>
           )}
 
-          {/* 右侧：时间周期滚动条 + 语言 + 状态 */}
+          {/* 右侧：时间周期选择 + 语言 + 状态 */}
           <div className="flex items-center gap-1.5 md:gap-2 ml-auto pr-2 md:pr-3">
-            {/* 横向滚动时间周期 */}
-            <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
+            {/* 移动端：TradingView 风格时间周期选择器 */}
+            <div className="lg:hidden">
+              <MobileTimeframeSelector
+                currentTimeframe={timeframe}
+                onChange={setTimeframe}
+                timeframes={TIMEFRAMES.map(tf => ({ key: tf.key, label: t(tf.label) }))}
+              />
+            </div>
+
+            {/* 桌面端：横向滚动时间周期 */}
+            <div className="hidden lg:flex items-center gap-0.5">
               {TIMEFRAMES.map(tf => (
                 <button
                   key={tf.key}

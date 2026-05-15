@@ -3,6 +3,7 @@ import { useAppStore } from "@/store/appStore";
 import { useI18n } from "@/i18n/context";
 import { useKlineData } from "@/hooks/useKlineData";
 import { useKlineStream, mergeCandle } from "@/services/klineStream";
+import { useChartPerformance } from "@/hooks/useChartPerformance";
 import { fetchRealMacroEvents } from "@/services/macroApi";
 import type { MacroEvent } from "@/store/appStore";
 import type { StrategySignal } from "@/services/strategyEngine";
@@ -61,6 +62,13 @@ const ChartWidget = memo(function ChartWidget() {
   const symbol = useAppStore((s) => s.currentSymbol);
   const timeframe = useAppStore((s) => s.currentTimeframe);
   const { klinesRef, dataVersion, isLoading: klineLoading, error, bumpVersion } = useKlineData(symbol, timeframe);
+
+  // 移动端性能优化 - K 线数据降采样
+  const { klines: optimizedKlines, isOptimized } = useChartPerformance({
+    klines: klinesRef.current,
+    maxPoints: 400, // 移动端最多显示 400 个点
+    enabled: true,
+  });
 
   const [loadedFactors, setLoadedFactors] = useState<MacroEvent[]>([]);
   const [alertToasts, setAlertToasts] = useState<AlertToast[]>([]);
@@ -148,13 +156,20 @@ const ChartWidget = memo(function ChartWidget() {
       {/* Chart Canvas */}
       <ChartCanvas
         ref={chartCanvasRef}
-        klines={klinesRef.current}
+        klines={isOptimized ? optimizedKlines : klinesRef.current}
         events={loadedFactors}
         strategyOutputs={strategyOutputs}
         onEventClick={handleEventClick}
         timeframe={timeframe}
         dataVersion={dataVersion}
       />
+
+      {/* 移动端性能优化指示器 */}
+      {isOptimized && (
+        <div className="lg:hidden absolute top-2 left-2 z-20 px-1.5 py-0.5 rounded bg-[#1a2236]/80 border border-[#2d3a52] text-[8px] text-[#475569] font-mono">
+          {optimizedKlines.length}/{klinesRef.current.length}
+        </div>
+      )}
 
       {/* Skeleton Loading Overlay */}
       {showSkeleton && (
