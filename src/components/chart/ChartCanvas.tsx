@@ -287,12 +287,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   // 长按信息浮层
   const longPressOverlay = longPressInfo && (
     <div 
-      className="absolute z-50 pointer-events-none bg-[#1a2236] border border-[#2d3a52] rounded-lg px-3 py-2 shadow-xl"
-      style={{
-        left: '50%',
-        top: '20%',
-        transform: 'translateX(-50%)',
-      }}
+      className="absolute z-50 pointer-events-none bg-[#1a2236] border border-[#2d3a52] rounded-lg px-3 py-2 shadow-xl left-1/2 top-1/5 -translate-x-1/2"
     >
       <div className="text-[11px] text-[#94a3b8]">
         {new Date(longPressInfo.time * 1000).toLocaleString()}
@@ -408,8 +403,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   return (
     <div
       ref={containerRef}
-      className="w-full h-full min-h-[200px] lg:min-h-[400px] relative"
-      style={{ background: THEME.bg }}
+      className="w-full h-full min-h-[200px] lg:min-h-[400px] relative bg-[#111827]"
     >
       {longPressOverlay}
       

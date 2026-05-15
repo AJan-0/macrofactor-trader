@@ -152,7 +152,6 @@ export function useTouchGestures({
           // 获取当前触摸位置对应的时间和价格
           const rect = container.getBoundingClientRect();
           const x = touch.clientX - rect.left;
-          const y = touch.clientY - rect.top;
           
           // 模拟十字光标
           chart.applyOptions({

@@ -87,7 +87,7 @@ const Toolbar = memo(function Toolbar() {
             <div className="lg:hidden">
               <MobileTimeframeSelector
                 currentTimeframe={timeframe}
-                onChange={setTimeframe}
+                onChange={(tf) => setTimeframe(tf as typeof timeframe)}
                 timeframes={TIMEFRAMES.map(tf => ({ key: tf.key, label: t(tf.label) }))}
               />
             </div>
