@@ -8,14 +8,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 const Toolbar = memo(function Toolbar() {
   const { t, locale, setLocale } = useI18n();
   const { theme, setTheme } = useTheme();
-  const { symbol, setSymbol, timeframe, setTimeframe, events, isLoading } = useAppStore(s => ({
-    symbol: s.currentSymbol,
-    setSymbol: s.setSymbol,
-    timeframe: s.currentTimeframe,
-    setTimeframe: s.setTimeframe,
-    events: s.events,
-    isLoading: s.isLoading,
-  }));
+  const symbol = useAppStore(s => s.currentSymbol);
+  const setSymbol = useAppStore(s => s.setSymbol);
+  const timeframe = useAppStore(s => s.currentTimeframe);
+  const setTimeframe = useAppStore(s => s.setTimeframe);
+  const events = useAppStore(s => s.events);
+  const isLoading = useAppStore(s => s.isLoading);
   const { price, changePct } = useRealtimePrice(symbol);
   const isUp = (changePct ?? 0) >= 0;
   const lastUpdate = price ? new Date().toLocaleTimeString() : "";

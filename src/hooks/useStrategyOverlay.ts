@@ -130,9 +130,18 @@ export function useStrategyOverlay({
   // 使用 ref 存储 klines 避免数组引用变化导致无限循环
   const klinesRef = useRef(klines);
   klinesRef.current = klines;
+  
+  // 使用 ref 存储 chart 和 candleSeries，避免引用变化导致无限循环
+  const chartRef = useRef(chart);
+  chartRef.current = chart;
+  const candleSeriesRef = useRef(candleSeries);
+  candleSeriesRef.current = candleSeries;
 
   useEffect(() => {
-    if (!klines.length || !chart || !candleSeries || !chartReady) return;
+    if (!klines.length || !chartReady) return;
+    const currentChart = chartRef.current;
+    const currentCandleSeries = candleSeriesRef.current;
+    if (!currentChart || !currentCandleSeries) return;
 
     let cancelled = false;
     const currentGen = ++dataGenRef.current;
@@ -169,7 +178,7 @@ export function useStrategyOverlay({
       }
 
       // Cleanup old lines
-      const chartInstance = chart;
+      const chartInstance = chartRef.current;
       if (!chartInstance) return;
       const linesToRemove = Array.from(strategyLineRefs.current.entries());
       for (const [lineId, series] of linesToRemove) {
@@ -217,9 +226,9 @@ export function useStrategyOverlay({
         size: 1 + Math.round(s.strength * 2),
       }));
       signalMarkers.sort((a, b) => (a.time as number) - (b.time as number));
-      if (signalMarkers.length > 0 && candleSeries) {
+      if (signalMarkers.length > 0 && candleSeriesRef.current) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (candleSeries as any).setMarkers?.(signalMarkers);
+        (candleSeriesRef.current as any).setMarkers?.(signalMarkers);
       }
     }
 
@@ -227,19 +236,22 @@ export function useStrategyOverlay({
     return () => {
       cancelled = true;
     };
+  // 注意：chart 和 candleSeries 使用 ref 存储，不在依赖数组中
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStrategies, chartReady, chart, candleSeries, symbol]);
+  }, [activeStrategies, chartReady, symbol]);
 
   // Cleanup when symbol/timeframe changes
   useEffect(() => {
-    if (!chart) return;
+    const currentChart = chartRef.current;
+    if (!currentChart) return;
     for (const [, series] of strategyLineRefs.current) {
-      try { chart.removeSeries(series); } catch { /* ignore */ }
+      try { currentChart.removeSeries(series); } catch { /* ignore */ }
     }
     strategyLineRefs.current.clear();
     setStrategyOutputs(new Map());
     dataGenRef.current += 1;
-  }, [symbol, chart]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
 
   const addStrategy = useCallback((def: StrategyDefinition) => {
     setActiveStrategies((prev) => {
@@ -255,7 +267,7 @@ export function useStrategyOverlay({
       next.delete(id);
       return next;
     });
-    const c = chart;
+    const c = chartRef.current;
     if (c) {
       for (const [lineId, series] of strategyLineRefs.current) {
         if (lineId.startsWith(`${id}-`)) {
@@ -264,7 +276,7 @@ export function useStrategyOverlay({
         }
       }
     }
-  }, [chart]);
+  }, []);
 
   const updateStrategyParam = useCallback(
     (strategyId: string, paramId: string, value: unknown) => {
@@ -294,14 +306,14 @@ export function useStrategyOverlay({
   const clearAllStrategies = useCallback(() => {
     setActiveStrategies([]);
     setStrategyOutputs(new Map());
-    const c = chart;
+    const c = chartRef.current;
     if (c) {
       for (const [, series] of strategyLineRefs.current) {
         try { c.removeSeries(series); } catch { /* ignore */ }
       }
     }
     strategyLineRefs.current.clear();
-  }, [chart]);
+  }, []);
 
   return {
     activeStrategies,
