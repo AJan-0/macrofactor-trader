@@ -5,14 +5,14 @@ import type { StrategyDefinition, StrategyOutput, StrategySignal } from "@/servi
 import { getDefaultParams } from "@/services/strategyEngine";
 import { safeParseActiveStrategies, safeSerializeStrategies } from "@/lib/validation";
 import { sendAlert } from "@/services/alertEngine";
-import type { KlineData } from "./ChartCanvas";
+import type { KlineData } from "@/components/chart/ChartCanvas";
 
 export interface ActiveStrategy {
   id: string;
   params: Record<string, import("@/services/strategyEngine").ParamValue>;
 }
 
-interface StrategyOverlayProps {
+interface UseStrategyOverlayOptions {
   chart: IChartApi | null;
   candleSeries: ISeriesApi<"Candlestick"> | null;
   klines: KlineData[];
@@ -26,14 +26,14 @@ interface StrategyOverlayProps {
   }) => void;
 }
 
-export default function StrategyOverlay({
+export function useStrategyOverlay({
   chart,
   candleSeries,
   klines,
   symbol,
   chartReady,
   onAlert,
-}: StrategyOverlayProps) {
+}: UseStrategyOverlayOptions) {
   const strategyLineRefs = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const workerRef = useRef<Worker | null>(null);
   const dataGenRef = useRef(0);
@@ -57,7 +57,7 @@ export default function StrategyOverlay({
       const valid = saved.filter((s) => strategyRegistry.get(s.id));
       if (valid.length) {
         setActiveStrategies(valid);
-        console.log(`[StrategyOverlay] Restored ${valid.length} strategies from localStorage`);
+        console.log(`[useStrategyOverlay] Restored ${valid.length} strategies from localStorage`);
       }
     }
   }, []);
@@ -76,7 +76,7 @@ export default function StrategyOverlay({
     let worker: Worker | null = null;
     try {
       worker = new Worker(
-        new URL("../../workers/strategy.worker.ts", import.meta.url),
+        new URL("../workers/strategy.worker.ts", import.meta.url),
         { type: "module" }
       );
       const pingId = `ping-${Date.now()}`;
@@ -97,14 +97,14 @@ export default function StrategyOverlay({
       pongPromise.then((ok) => {
         if (ok) {
           workerRef.current = worker;
-          console.log("[StrategyOverlay] Strategy worker ready");
+          console.log("[useStrategyOverlay] Strategy worker ready");
         } else {
-          console.warn("[StrategyOverlay] Worker ping timeout, using main thread");
+          console.warn("[useStrategyOverlay] Worker ping timeout, using main thread");
           worker?.terminate();
         }
       });
     } catch (err) {
-      console.warn("[StrategyOverlay] Failed to init strategy worker:", err);
+      console.warn("[useStrategyOverlay] Failed to init strategy worker:", err);
       worker?.terminate();
     }
     return () => {
@@ -127,6 +127,10 @@ export default function StrategyOverlay({
   }, [chart]);
 
   // Calculate and draw strategies (with proper guards)
+  // 使用 ref 存储 klines 避免数组引用变化导致无限循环
+  const klinesRef = useRef(klines);
+  klinesRef.current = klines;
+
   useEffect(() => {
     if (!klines.length || !chart || !candleSeries || !chartReady) return;
 
@@ -134,9 +138,10 @@ export default function StrategyOverlay({
     const currentGen = ++dataGenRef.current;
 
     async function run() {
+      const currentKlines = klinesRef.current;
       const newOutputs = await calculateStrategies(
         activeStrategies,
-        klines,
+        currentKlines,
         workerRef.current
       );
       if (cancelled || currentGen !== dataGenRef.current) return;
@@ -144,9 +149,9 @@ export default function StrategyOverlay({
       setStrategyOutputs(newOutputs);
 
       // Alert triggers
-      const latestKlineTime = klines.at(-1)?.time ?? 0;
+      const latestKlineTime = currentKlines.at(-1)?.time ?? 0;
       const recentWindow =
-        latestKlineTime - (klines.length > 3 ? klines[klines.length - 3].time : latestKlineTime);
+        latestKlineTime - (currentKlines.length > 3 ? currentKlines[currentKlines.length - 3].time : latestKlineTime);
       for (const [id, output] of newOutputs) {
         const strategy = strategyRegistry.get(id);
         if (!strategy) continue;
@@ -223,7 +228,7 @@ export default function StrategyOverlay({
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStrategies, chartReady, klines, chart, candleSeries, symbol]);
+  }, [activeStrategies, chartReady, chart, candleSeries, symbol]);
 
   // Cleanup when symbol/timeframe changes
   useEffect(() => {
@@ -355,7 +360,7 @@ async function calculateStrategies(
       activeStrategies.map((s) => s.id).filter((id) => !outputs.has(id))
     );
     if (failedIds.size > 0) {
-      console.warn(`[StrategyOverlay] Worker missed ${failedIds.size} strategies, falling back to main thread`);
+      console.warn(`[useStrategyOverlay] Worker missed ${failedIds.size} strategies, falling back to main thread`);
       for (const as of activeStrategies) {
         if (!failedIds.has(as.id)) continue;
         const strategy = strategyRegistry.get(as.id);
@@ -364,7 +369,7 @@ async function calculateStrategies(
           const output = strategy.calculate({ klines, params: as.params });
           outputs.set(as.id, output);
         } catch (err) {
-          console.warn(`[StrategyOverlay] ${as.id} main-thread calc failed:`, err);
+          console.warn(`[useStrategyOverlay] ${as.id} main-thread calc failed:`, err);
         }
       }
     }
@@ -376,7 +381,7 @@ async function calculateStrategies(
         const output = strategy.calculate({ klines, params: as.params });
         outputs.set(as.id, output);
       } catch (err) {
-        console.warn(`[StrategyOverlay] ${as.id} calculation failed:`, err);
+        console.warn(`[useStrategyOverlay] ${as.id} calculation failed:`, err);
       }
     }
   }

@@ -8,7 +8,7 @@ import type { MacroEvent } from "@/store/appStore";
 import type { StrategySignal } from "@/services/strategyEngine";
 import type { ChartCanvasRef } from "./chart/ChartCanvas";
 import ChartCanvas from "./chart/ChartCanvas";
-import StrategyOverlay from "./chart/StrategyOverlay";
+import { useStrategyOverlay } from "@/hooks/useStrategyOverlay";
 import StrategyControlPanel from "./chart/StrategyControlPanel";
 
 let _factorCache: { data: MacroEvent[]; ts: number } | null = null;
@@ -101,6 +101,13 @@ const ChartWidget = memo(function ChartWidget() {
   const chartAPI = chartCanvasRef.current;
   const isChartReady = chartAPI !== null && chartAPI.chart !== null;
 
+  const handleAlert = useCallback((toast: AlertToast) => {
+    setAlertToasts((prev) => {
+      if (prev.some((t) => t.id === toast.id)) return prev;
+      return [...prev.slice(-4), toast];
+    });
+  }, []);
+
   const {
     activeStrategies,
     strategyOutputs,
@@ -110,18 +117,13 @@ const ChartWidget = memo(function ChartWidget() {
     updateStrategyParam,
     resetStrategyParams,
     clearAllStrategies,
-  } = StrategyOverlay({
+  } = useStrategyOverlay({
     chart: chartAPI?.chart ?? null,
     candleSeries: chartAPI?.candleSeries ?? null,
     klines: klinesRef.current,
     symbol,
     chartReady: isChartReady,
-    onAlert: useCallback((toast: AlertToast) => {
-      setAlertToasts((prev) => {
-        if (prev.some((t) => t.id === toast.id)) return prev;
-        return [...prev.slice(-4), toast];
-      });
-    }, []),
+    onAlert: handleAlert,
   });
 
   // Handle event click from chart

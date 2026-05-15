@@ -234,9 +234,14 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   }, [events, klines, dataVersion]);
 
   // Update data when klines/events change
+  // 使用 ref 防止无限循环
+  const isUpdatingRef = useRef(false);
   useEffect(() => {
     if (!chartRef.current || !candleRef.current || !volumeRef.current) return;
-
+    if (isUpdatingRef.current) return;
+    
+    isUpdatingRef.current = true;
+    
     candleRef.current.setData(candleData);
     volumeRef.current.setData(volumeData);
     chartRef.current.priceScale("right").applyOptions({ autoScale: true });
@@ -256,12 +261,16 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
 
     requestAnimationFrame(() => {
       chartRef.current?.timeScale().fitContent();
+      isUpdatingRef.current = false;
     });
   }, [candleData, volumeData, markers, timeframe]);
 
-  // Update highlight on hover
-  // 移动端触摸手势支持
-  useTouchGestures({ chart: chartRef.current, container: containerRef.current });
+  // 移动端触摸手势支持 - 使用 ref 避免重复创建
+  const touchGestureRef = useRef({ chart: chartRef.current, container: containerRef.current });
+  useEffect(() => {
+    touchGestureRef.current = { chart: chartRef.current, container: containerRef.current };
+  }, []);
+  useTouchGestures(touchGestureRef.current);
 
   const hoverTimestamp = useAppStore((s) => s.hoverTimestamp);
   useEffect(() => {
