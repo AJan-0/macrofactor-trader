@@ -1,0 +1,60 @@
+[33mb3d8c18[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Revert "fix: improve API response handling and add debug logging for kline data"
+[33m1833bdb[m 仓库整理
+[33m6890c21[m fix: improve API response handling and add debug logging for kline data
+[33m07e7443[m fix: adjust data fetch limits per timeframe to match API constraints
+[33m8866bb8[m feat: extend K-line data to 3 years for all timeframes
+[33ma735f3d[m 移动端图表优化
+[33m9e03f8e[m Add Vercel deployment config
+[33m80774bf[m 移动端
+[33me4015c7[m 移动端网络
+[33m24ca141[m 移动端测试v2
+[33m471e9cb[m 移动端测试
+[33mf7b255e[m 移动端优化
+[33m570f790[m React 无限循环问题修复
+[33med3c568[m 白屏修复
+[33mdba680b[m React Error #185
+[33ma6457c7[m 如果有问题，恢复上一个版本
+[33m0809a97[m Fix useKlineData hook and improve stability checks
+[33mcd768f8[m Update deploy.yml
+[33m1ba4bb3[m Update deploy.yml
+[33m088b8f2[m Update deploy.yml
+[33m2af1176[m Recreate virtual environment in deploy workflow
+[33me4bc66d[m fix(ci): robust python/venv detection for server deploy
+[33m0486496[m fix(ci): auto-install python3-venv if missing before creating venv
+[33ma3eb44f[m fix(deploy): ensure python3.11-venv is always installed
+[33mb4242e7[m fix(ci): auto-create venv if missing on server
+[33m969f427[m fix(ci): fix heredoc indentation in deploy.yml causing SSH command hang
+[33m6f471aa[m deploy: 阿里云 ECS 全栈部署配置
+[33mb90719a[m 测试v6
+[33m01918e0[m 修复v5
+[33m02b7e54[m 修复v3
+[33m7e87399[m 修复v2
+[33mb13e105[m[33m ([m[1;35mrefs/stash[m[33m)[m On main: !!GitHub_Desktop<main>
+[33m87dfa76[m index on main: a6e9b62 v5
+[33meafd49d[m 测试
+[33mc185824[m 移动端优化
+[33m8f0ffaf[m v7
+[33mcf6795a[m v6
+[33mc121e23[m 修复
+[33m0977679[m v6
+[33m4f0c8b0[m v5
+[33mdf10dcd[m production: lint zero errors, remove recharts, real news API, Zod validation, Error Boundaries
+[33m3e14cc0[m v4
+[33mab218ca[m v4更新
+[33ma6e9b62[m v5
+[33m32bc2d5[m production: lint zero errors, remove recharts, real news API, Zod validation, Error Boundaries
+[33m62c883e[m v4
+[33m143bf5b[m v4更新
+[33m5e44d94[m 移动端优化
+[33m786b06a[m v0.4.0 全链条
+[33m0217011[m 架构变更
+[33m1ebcb34[m 优化
+[33m04c64a1[m  编译更新
+[33m571baf6[m Merge branch 'main' of https://github.com/AJan-0/macrofactor-trader
+[33m9100d7d[m feat: mobile responsive layout with bottom nav + sheet panels
+[33m3882528[m Update deploy.yml
+[33m23af4b6[m Update vite.config.ts
+[33m580f7bd[m chore: add deploy scripts
+[33m56a1a85[m chore: add deploy scripts
+[33mee6bb83[m chore: add deploy script and nginx config
+[33m6784f34[m feat: init macrofactor trader dashboard
