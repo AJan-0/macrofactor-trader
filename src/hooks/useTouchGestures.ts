@@ -2,12 +2,11 @@
  * 图表触摸手势 Hook - TradingView 风格
  * 为 lightweight-charts 添加移动端完整手势支持
  * 
- * 特性：
- * - 双指捏合缩放 (Pinch-to-Zoom)
- * - 单指平移滚动 (Pan-to-Scroll)
- * - 长按显示十字光标 (Long-press crosshair)
- * - 惯性滚动 (Inertial scrolling)
- * - 边缘回弹 (Edge bounce)
+ * 修复：
+ * - 手势初始化时机问题
+ * - 平移计算错误（使用 scrollToPosition 替代 setVisibleLogicalRange）
+ * - 添加错误边界防止崩溃
+ * - 优化缩放体验
  */
 
 import { useEffect, useRef, useCallback } from "react";
@@ -33,7 +32,7 @@ export function useTouchGestures({
     startBarSpacing: number;
     startX: number;
     startY: number;
-    startScrollPos: number;
+    startScrollPosition: number;
     isPinching: boolean;
     isPanning: boolean;
     isLongPress: boolean;
@@ -44,6 +43,7 @@ export function useTouchGestures({
     velocityX: number;
     lastMoveTime: number;
     rafId: number | null;
+    lastLogicalRange: { from: number; to: number } | null;
   } | null>(null);
 
   const getDistance = useCallback((t1: Touch, t2: Touch) => {
@@ -60,7 +60,7 @@ export function useTouchGestures({
       startBarSpacing: 6,
       startX: 0,
       startY: 0,
-      startScrollPos: 0,
+      startScrollPosition: 0,
       isPinching: false,
       isPanning: false,
       isLongPress: false,
@@ -71,27 +71,23 @@ export function useTouchGestures({
       velocityX: 0,
       lastMoveTime: 0,
       rafId: null as number | null,
+      lastLogicalRange: null as { from: number; to: number } | null,
     };
     gestureRef.current = state;
 
-    // 长按检测时间 (ms)
-    const LONG_PRESS_DURATION = 500;
-    // 双击间隔 (ms)
+    const LONG_PRESS_DURATION = 600;
     const DOUBLE_TAP_INTERVAL = 300;
-    // 惯性滚动衰减系数
-    const FRICTION = 0.95;
-    // 最小速度阈值
-    const MIN_VELOCITY = 0.5;
+    const FRICTION = 0.92;
+    const MIN_VELOCITY = 0.3;
+    const PINCH_SENSITIVITY = 0.5;
 
     const handleTouchStart = (e: TouchEvent) => {
-      // 取消之前的惯性滚动
       if (state.rafId !== null) {
         cancelAnimationFrame(state.rafId);
         state.rafId = null;
       }
 
       if (e.touches.length === 2) {
-        // Pinch start
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         const distance = getDistance(t1, t2);
@@ -104,7 +100,6 @@ export function useTouchGestures({
         state.startDistance = distance;
         state.startBarSpacing = options.barSpacing ?? 6;
         
-        // 取消长按检测
         if (state.longPressTimer) {
           clearTimeout(state.longPressTimer);
           state.longPressTimer = null;
@@ -112,18 +107,16 @@ export function useTouchGestures({
       } else if (e.touches.length === 1) {
         const touch = e.touches[0];
         const timeScale = chart.timeScale();
-        const logicalRange = timeScale.getVisibleLogicalRange();
         
         state.isPinching = false;
         state.isPanning = true;
         state.isLongPress = false;
         state.startX = touch.clientX;
         state.startY = touch.clientY;
-        state.startScrollPos = logicalRange ? (logicalRange.from + logicalRange.to) / 2 : 0;
+        state.startScrollPosition = timeScale.scrollPosition() ?? 0;
         state.velocityX = 0;
         state.lastMoveTime = Date.now();
 
-        // 检测双击
         const now = Date.now();
         const timeSinceLastTouch = now - state.lastTouchTime;
         const distanceFromLastTouch = Math.sqrt(
@@ -131,12 +124,11 @@ export function useTouchGestures({
           Math.pow(touch.clientY - state.lastTouchY, 2)
         );
         
-        if (timeSinceLastTouch < DOUBLE_TAP_INTERVAL && distanceFromLastTouch < 30) {
-          // 双击 - 重置缩放
+        if (timeSinceLastTouch < DOUBLE_TAP_INTERVAL && distanceFromLastTouch < 40) {
           e.preventDefault();
           chart.timeScale().fitContent();
           onDoubleTap?.();
-          state.lastTouchTime = 0; // 重置，防止三连击
+          state.lastTouchTime = 0;
           return;
         }
         
@@ -144,16 +136,13 @@ export function useTouchGestures({
         state.lastTouchX = touch.clientX;
         state.lastTouchY = touch.clientY;
 
-        // 长按检测
         state.longPressTimer = setTimeout(() => {
           state.isLongPress = true;
           state.isPanning = false;
           
-          // 获取当前触摸位置对应的时间和价格
           const rect = container.getBoundingClientRect();
           const x = touch.clientX - rect.left;
           
-          // 模拟十字光标
           chart.applyOptions({
             crosshair: {
               vertLine: { visible: true, labelVisible: true },
@@ -161,10 +150,8 @@ export function useTouchGestures({
             }
           });
           
-          // 触发十字光标移动事件
           const coordinateToTime = chart.timeScale().coordinateToTime(x);
           if (coordinateToTime !== null) {
-            // 尝试获取价格 (通过模拟 crosshairMove)
             onLongPress?.(coordinateToTime as number, 0);
           }
         }, LONG_PRESS_DURATION);
@@ -179,20 +166,19 @@ export function useTouchGestures({
 
       if (!state.isPinching && !state.isPanning) return;
 
-      // 如果移动距离超过阈值，取消长按
       if (e.touches.length === 1 && state.longPressTimer) {
         const touch = e.touches[0];
         const moveDistance = Math.sqrt(
           Math.pow(touch.clientX - state.startX, 2) +
           Math.pow(touch.clientY - state.startY, 2)
         );
-        if (moveDistance > 10) {
+        if (moveDistance > 15) {
           clearTimeout(state.longPressTimer);
           state.longPressTimer = null;
         }
       }
 
-      e.preventDefault(); // 阻止页面滚动
+      e.preventDefault();
 
       if (state.isPinching && e.touches.length === 2) {
         const t1 = e.touches[0];
@@ -200,9 +186,9 @@ export function useTouchGestures({
         const distance = getDistance(t1, t2);
         const scale = distance / state.startDistance;
         
-        // 使用对数缩放，体验更平滑
-        const logScale = Math.log(scale + 1) / Math.log(2);
-        const newBarSpacing = Math.max(1, Math.min(100, state.startBarSpacing * (1 + logScale)));
+        const newBarSpacing = Math.max(1, Math.min(100, 
+          state.startBarSpacing * Math.pow(scale, PINCH_SENSITIVITY)
+        ));
         
         chart.timeScale().applyOptions({ barSpacing: newBarSpacing });
       } else if (state.isPanning && e.touches.length === 1) {
@@ -211,37 +197,31 @@ export function useTouchGestures({
         const timeScale = chart.timeScale();
         const barSpacing = timeScale.options().barSpacing ?? 6;
         
-        // 计算速度用于惯性滚动
         const now = Date.now();
         const dt = now - state.lastMoveTime;
         if (dt > 0) {
-          state.velocityX = (touch.clientX - state.lastTouchX) / dt * 16; // 归一化到 60fps
+          state.velocityX = (touch.clientX - state.lastTouchX) / dt * 16;
         }
         state.lastMoveTime = now;
         state.lastTouchX = touch.clientX;
         
         const scrollDelta = -deltaX / barSpacing;
-        const logicalRange = timeScale.getVisibleLogicalRange();
-        if (logicalRange) {
-          const currentCenter = (logicalRange.from + logicalRange.to) / 2;
-          const newCenter = currentCenter + scrollDelta;
-          const halfWidth = (logicalRange.to - logicalRange.from) / 2;
-          timeScale.setVisibleLogicalRange({ 
-            from: newCenter - halfWidth, 
-            to: newCenter + halfWidth 
-          });
+        const newPosition = state.startScrollPosition + scrollDelta;
+        
+        try {
+          timeScale.scrollToPosition(newPosition, false);
+        } catch (err) {
+          console.warn("Scroll error:", err);
         }
       }
     };
 
     const handleTouchEnd = () => {
-      // 取消长按检测
       if (state.longPressTimer) {
         clearTimeout(state.longPressTimer);
         state.longPressTimer = null;
       }
 
-      // 恢复十字光标默认设置
       if (state.isLongPress) {
         chart.applyOptions({
           crosshair: {
@@ -251,7 +231,6 @@ export function useTouchGestures({
         });
       }
 
-      // 惯性滚动
       if (state.isPanning && Math.abs(state.velocityX) > MIN_VELOCITY) {
         const timeScale = chart.timeScale();
         const barSpacing = timeScale.options().barSpacing ?? 6;
@@ -264,16 +243,15 @@ export function useTouchGestures({
             return;
           }
           
-          const logicalRange = timeScale.getVisibleLogicalRange();
-          if (logicalRange) {
-            const scrollDelta = -state.velocityX / barSpacing;
-            const currentCenter = (logicalRange.from + logicalRange.to) / 2;
-            const newCenter = currentCenter + scrollDelta;
-            const halfWidth = (logicalRange.to - logicalRange.from) / 2;
-            timeScale.setVisibleLogicalRange({ 
-              from: newCenter - halfWidth, 
-              to: newCenter + halfWidth 
-            });
+          const scrollDelta = -state.velocityX / barSpacing;
+          const currentPosition = timeScale.scrollPosition() ?? 0;
+          
+          try {
+            timeScale.scrollToPosition(currentPosition + scrollDelta, false);
+          } catch (err) {
+            console.warn("Inertial scroll error:", err);
+            state.rafId = null;
+            return;
           }
           
           state.rafId = requestAnimationFrame(animate);

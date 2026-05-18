@@ -268,26 +268,28 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
 
   // 移动端触摸手势支持 - TradingView 风格
   const [longPressInfo, setLongPressInfo] = useState<{ time: number; price: number } | null>(null);
-  const [chartReady, setChartReady] = useState(false);
   
-  // 当 chart 初始化完成后启用手势
+  // 使用 state 存储 chart 和 container 引用，确保手势 hook 能正确初始化
+  const [chartInstance, setChartInstance] = useState<IChartApi | null>(null);
+  const [containerInstance, setContainerInstance] = useState<HTMLDivElement | null>(null);
+  
+  // 当 chart 初始化完成后更新 state
   useEffect(() => {
     if (chartRef.current && containerRef.current) {
-      setChartReady(true);
+      setChartInstance(chartRef.current);
+      setContainerInstance(containerRef.current);
     }
   }, []);
   
   useTouchGestures({
-    chart: chartRef.current,
-    container: containerRef.current,
-    enabled: chartReady,
+    chart: chartInstance,
+    container: containerInstance,
+    enabled: true,
     onLongPress: (time, price) => {
       setLongPressInfo({ time, price });
-      // 3秒后自动隐藏
       setTimeout(() => setLongPressInfo(null), 3000);
     },
     onDoubleTap: () => {
-      // 双击重置视图
       chartRef.current?.timeScale().fitContent();
     },
   });
