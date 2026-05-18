@@ -37,3 +37,20 @@ __pycache__/
 .env.production
 
 .vercel
+
+# === Auto-added cleanup rules ===
+.venv/
+__pycache__/
+*.py[cod]
+*.db
+*.bak
+.env.mobile
+.env.local
+.env.production
+
+# Test screenshots (keep in repo only if needed for docs)
+/tests/screenshots/
+
+# Build outputs
+dist/
+build/
