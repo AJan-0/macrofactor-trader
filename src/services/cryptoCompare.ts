@@ -32,15 +32,16 @@ const SYMBOL_MAP: Record<AssetSymbol, string> = {
 
 // Timeframe -> CryptoCompare API 参数映射
 // barsPerDay: 每天有多少根K线，用于计算目标天数需要请求多少数据
-// defaultDays: 默认回溯天数（全部统一为3年，确保策略有足够数据）
+// defaultDays: 默认回溯天数（根据时间周期调整，确保能获取足够数据）
+// 注意：小时间周期（1m-15m）数据量巨大，受限于 API 限制，实际获取约 30-90 天
 const TIMEFRAME_MAP: Record<Timeframe, { endpoint: string; aggregate: number; barsPerDay: number; defaultDays: number }> = {
-  "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 365 * 3 },
-  "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 365 * 3 },
-  "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 365 * 3 },
-  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 365 * 3 },
-  "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 365 * 3 },
-  "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365 * 3 },
-  "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3 },
+  "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 30 },   // ~30天 (43k bars)
+  "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 60 },   // ~60天 (28k bars)
+  "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 90 },   // ~90天 (25k bars)
+  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 180 },  // ~180天 (17k bars)
+  "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 365 * 2 }, // ~2年 (17k bars)
+  "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365 * 3 }, // ~3年 (6.5k bars)
+  "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3 }, // ~3年 (1k bars)
 };
 
 const API_MAX_LIMIT = 2000;      // CryptoCompare 单次最大返回条数
