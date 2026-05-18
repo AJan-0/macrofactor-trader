@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useCallback } from "react";
-import type { KlineData } from "@/components/chart/ChartCanvas";
+import type { KlineData } from "@/services/cryptoCompare";
 
 interface UseChartPerformanceOptions {
   klines: KlineData[];
