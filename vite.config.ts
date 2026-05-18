@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 3000,
+      host: true,
+      https: false,
+      cors: true,
       proxy: {
         // REST API proxy
         '/api': {
