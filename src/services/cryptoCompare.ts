@@ -242,14 +242,7 @@ async function _fetchKlinesFromAPI(
     if (toTs) url += `&toTs=${toTs}`;
 
     const json = await rateLimitedFetch(url, signal) as Record<string, any>;
-    // CryptoCompare v2 API 返回结构: { Data: { Data: [...], TimeFrom: ..., TimeTo: ... } }
-    const raw: any[] = json.Data?.Data || json.Data || [];
-    
-    if (!Array.isArray(raw)) {
-      console.warn(`[CryptoCompare] ${symbol} ${tf}: unexpected response format`, json);
-      emptyResponseCount++;
-      break;
-    }
+    const raw: any[] = json.Data?.Data || [];
 
     if (!raw.length) {
       emptyResponseCount++;
@@ -296,11 +289,6 @@ async function _fetchKlinesFromAPI(
     `covers ${daysCovered.toFixed(0)} days from ${earliestDate.toISOString().split('T')[0]} to ${latestDate.toISOString().split('T')[0]}, ` +
     `latest $${unique.at(-1)?.close?.toFixed(2) ?? 'N/A'})`
   );
-  
-  // 详细调试信息
-  if (unique.length < 100) {
-    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: very few bars (${unique.length}), check API response`);
-  }
   
   // 警告：如果数据量不足
   if (unique.length < MIN_BARS_REQUIRED) {
