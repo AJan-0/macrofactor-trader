@@ -32,18 +32,20 @@ const SYMBOL_MAP: Record<AssetSymbol, string> = {
 
 // Timeframe -> CryptoCompare API 参数映射
 // barsPerDay: 每天有多少根K线，用于计算目标天数需要请求多少数据
+// defaultDays: 默认回溯天数（全部统一为3年，确保策略有足够数据）
 const TIMEFRAME_MAP: Record<Timeframe, { endpoint: string; aggregate: number; barsPerDay: number; defaultDays: number }> = {
-  "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 1 },
-  "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 2 },
-  "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 3 },
-  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 7 },
-  "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 90 },
-  "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365 * 2 },
+  "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 365 * 3 },
+  "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 365 * 3 },
+  "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 365 * 3 },
+  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 365 * 3 },
+  "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 365 * 3 },
+  "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365 * 3 },
   "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3 },
 };
 
 const API_MAX_LIMIT = 2000;      // CryptoCompare 单次最大返回条数
-const MAX_REQUESTS = 15;         // 最多分页请求次数，防止过多API调用
+const MAX_REQUESTS = 50;         // 最多分页请求次数（3年数据需要更多分页）
+const MIN_BARS_REQUIRED = 1000;  // 最少需要的K线数量（低于此数警告）
 
 /** 获取 timeframe 的间隔秒数（用于实时更新判断新 bar） */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -229,8 +231,9 @@ async function _fetchKlinesFromAPI(
   const allKlines: KlineData[] = [];
   let toTs: number | undefined = undefined;
   let requests = 0;
+  let emptyResponseCount = 0;
 
-  while (allKlines.length < targetBars && requests < MAX_REQUESTS) {
+  while (allKlines.length < targetBars && requests < MAX_REQUESTS && emptyResponseCount < 3) {
     if (signal?.aborted) throw new Error("Aborted");
 
     const limit = Math.min(API_MAX_LIMIT, targetBars - allKlines.length);
@@ -240,7 +243,10 @@ async function _fetchKlinesFromAPI(
     const json = await rateLimitedFetch(url, signal) as Record<string, any>;
     const raw: any[] = json.Data?.Data || [];
 
-    if (!raw.length) break;
+    if (!raw.length) {
+      emptyResponseCount++;
+      break;
+    }
 
     const batch: KlineData[] = raw.map((d: Record<string, any>) => ({
       time: d.time as number,
@@ -254,6 +260,12 @@ async function _fetchKlinesFromAPI(
     allKlines.push(...batch);
     toTs = raw[0].time - 1;
     requests++;
+    
+    // 如果返回数据少于请求数量，说明已到最早数据
+    if (raw.length < limit) {
+      console.log(`[CryptoCompare] ${symbol} ${tf}: reached earliest data at ${new Date(toTs * 1000).toISOString()}`);
+      break;
+    }
   }
 
   // 去重并排序（按时间升序）
@@ -265,7 +277,23 @@ async function _fetchKlinesFromAPI(
   });
   unique.sort((a, b) => a.time - b.time);
 
-  console.log(`[CryptoCompare] ${symbol} ${tf}: ${unique.length} bars (target ~${targetBars}, ${requests} requests, latest $${unique.at(-1)?.close?.toFixed(2) ?? 'N/A'})`);
+  // 数据完整性检查
+  const earliestDate = new Date(unique[0]?.time * 1000 || 0);
+  const latestDate = new Date(unique[unique.length - 1]?.time * 1000 || 0);
+  const daysCovered = (unique[unique.length - 1]?.time - unique[0]?.time) / 86400 || 0;
+  
+  console.log(
+    `[CryptoCompare] ${symbol} ${tf}: ${unique.length} bars ` +
+    `(target ~${targetBars}, ${requests} requests, ` +
+    `covers ${daysCovered.toFixed(0)} days from ${earliestDate.toISOString().split('T')[0]} to ${latestDate.toISOString().split('T')[0]}, ` +
+    `latest $${unique.at(-1)?.close?.toFixed(2) ?? 'N/A'})`
+  );
+  
+  // 警告：如果数据量不足
+  if (unique.length < MIN_BARS_REQUIRED) {
+    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: only ${unique.length} bars returned, minimum recommended is ${MIN_BARS_REQUIRED} for accurate strategy calculation`);
+  }
+  
   setCached(symbol, tf, unique);
   setLSCached(symbol, tf, unique);
   return unique;
