@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Toolbar from "@/components/Toolbar";
 import ChartWidget from "@/components/ChartWidget";
-import ErrorBoundary from "@/components/ErrorBoundary";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import FactorDashboard from "@/components/FactorDashboard";
 import FactorTimeline from "@/components/FactorTimeline";
 import NarrativeBar from "@/components/NarrativeBar";

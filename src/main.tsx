@@ -5,6 +5,7 @@ import './index.css'
 import Dashboard from './pages/Dashboard'
 import { I18nProvider } from './i18n/I18nProvider'
 import { ThemeProvider } from './components/providers/ThemeProvider'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // 全局错误处理
 window.addEventListener('error', (event) => {
@@ -66,13 +67,15 @@ try {
 
   root.render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <I18nProvider>
-            <Dashboard />
-          </I18nProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <I18nProvider>
+              <Dashboard />
+            </I18nProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
     </StrictMode>,
   )
   updateStatus('应用已加载完成')
