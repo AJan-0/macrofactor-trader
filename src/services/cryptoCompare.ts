@@ -258,7 +258,20 @@ async function _fetchKlinesFromAPI(
     }));
 
     allKlines.push(...batch);
-    toTs = raw[0].time - 1;
+    
+    // Bug Fix: 使用最新数据点的时间作为下一页的 toTs
+    // CryptoCompare 返回的数据是按时间升序排列的，raw[raw.length-1] 是最新的数据点
+    const lastBar = raw[raw.length - 1];
+    const nextToTs = lastBar.time - 1;
+    
+    // Bug Fix: 检查时间是否继续推进，而不是看数量
+    // 如果 nextToTs 没有变化或反而变大了，说明没有更多历史数据
+    if (toTs !== undefined && nextToTs >= toTs) {
+      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available (time not progressing)`);
+      break;
+    }
+    
+    toTs = nextToTs;
     requests++;
     
     // 如果返回数据少于请求数量，说明已到最早数据
@@ -289,14 +302,62 @@ async function _fetchKlinesFromAPI(
     `latest $${unique.at(-1)?.close?.toFixed(2) ?? 'N/A'})`
   );
   
+  // Bug Fix: 数据完整性验证
+  const isDataComplete = validateKlineData(unique, days, tf);
+  
   // 警告：如果数据量不足
   if (unique.length < MIN_BARS_REQUIRED) {
     console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: only ${unique.length} bars returned, minimum recommended is ${MIN_BARS_REQUIRED} for accurate strategy calculation`);
   }
   
-  setCached(symbol, tf, unique);
-  setLSCached(symbol, tf, unique);
+  // Bug Fix: 只有数据完整才缓存
+  if (isDataComplete) {
+    setCached(symbol, tf, unique);
+    setLSCached(symbol, tf, unique);
+  } else {
+    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: data incomplete, skipping cache`);
+  }
+  
   return unique;
+}
+
+/**
+ * 验证 K 线数据完整性
+ * 检查：数据点数量、时间跨度、时间连续性
+ */
+function validateKlineData(data: KlineData[], targetDays: number, tf: Timeframe): boolean {
+  if (data.length < 10) return false;
+
+  const cfg = TIMEFRAME_MAP[tf];
+  if (!cfg) return false;
+
+  // 检查时间跨度是否达到目标的 80%
+  const actualDays = (data[data.length - 1].time - data[0].time) / 86400;
+  if (actualDays < targetDays * 0.8) {
+    console.warn(`[CryptoCompare] validate: time span ${actualDays.toFixed(0)}d < target ${targetDays}d * 0.8`);
+    return false;
+  }
+
+  // 检查时间是否单调递增
+  for (let i = 1; i < data.length; i++) {
+    if (data[i].time <= data[i - 1].time) {
+      console.warn(`[CryptoCompare] validate: time not monotonic at index ${i}`);
+      return false;
+    }
+  }
+
+  // 检查 OHLC 数据有效性
+  const invalidBar = data.find(d =>
+    d.high < d.low || d.high < d.open || d.high < d.close ||
+    d.low > d.open || d.low > d.close ||
+    d.open <= 0 || d.close <= 0 || d.high <= 0 || d.low <= 0
+  );
+  if (invalidBar) {
+    console.warn(`[CryptoCompare] validate: invalid OHLC at time ${invalidBar.time}`);
+    return false;
+  }
+
+  return true;
 }
 
 /** 读取过期缓存（stale-while-revalidate fallback） */
