@@ -38,9 +38,18 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ["react", "react-dom"],
+            // 核心框架（首屏必需）
+            vendor: ["react", "react-dom", "react-dom/client"],
+            // UI 组件库（首屏必需）
+            ui: ["@radix-ui/react-dialog", "@radix-ui/react-select", "@radix-ui/react-slider", "@radix-ui/react-tabs", "@radix-ui/react-tooltip", "class-variance-authority", "clsx", "tailwind-merge"],
+            // 图表（首屏必需但可延后）
             charts: ["lightweight-charts"],
+            // 数据可视化（非首屏）
             d3: ["d3"],
+            // 状态管理（首屏必需）
+            state: ["zustand", "@tanstack/react-query"],
+            // 工具库（按需加载）
+            utils: ["date-fns", "lucide-react"],
           },
         },
       },

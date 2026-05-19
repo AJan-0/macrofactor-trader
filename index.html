@@ -10,6 +10,16 @@
     <meta name="description" content="MacroFactor Trader — 宏观因子与资产价格可视化分析平台" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
+    
+    <!-- P1 性能优化：预加载关键资源 -->
+    <link rel="preconnect" href="https://min-api.cryptocompare.com" />
+    <link rel="preconnect" href="https://api.coingecko.com" />
+    <link rel="dns-prefetch" href="https://min-api.cryptocompare.com" />
+    <link rel="dns-prefetch" href="https://api.coingecko.com" />
+    
+    <!-- 预加载首屏关键字体（如果有自定义字体） -->
+    <!-- <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin /> -->
+    
     <title>MacroFactor Trader</title>
     <script>
       window.__errors__ = [];
