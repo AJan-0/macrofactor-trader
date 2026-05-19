@@ -4,6 +4,7 @@ import { useI18n } from "@/i18n/context";
 import { useKlineData } from "@/hooks/useKlineData";
 import { useKlineStream, mergeCandle } from "@/services/klineStream";
 import { useChartPerformance } from "@/hooks/useChartPerformance";
+import { useRealtimePrice } from "@/services/priceStream";
 import { fetchRealMacroEvents } from "@/services/macroApi";
 import type { MacroEvent } from "@/store/appStore";
 import type { StrategySignal } from "@/services/strategyEngine";
@@ -11,6 +12,8 @@ import type { ChartCanvasRef } from "./chart/ChartCanvas";
 import ChartCanvas from "./chart/ChartCanvas";
 import { useStrategyOverlay } from "@/hooks/useStrategyOverlay";
 import StrategyControlPanel from "./chart/StrategyControlPanel";
+import MobileChartHeader from "./chart/MobileChartHeader";
+import MobileTradingPanel from "./chart/MobileTradingPanel";
 
 let _factorCache: { data: MacroEvent[]; ts: number } | null = null;
 const FACTOR_CACHE_MS = 300_000; // 5-minute TTL
@@ -61,7 +64,10 @@ const ChartWidget = memo(function ChartWidget() {
 
   const symbol = useAppStore((s) => s.currentSymbol);
   const timeframe = useAppStore((s) => s.currentTimeframe);
+  const setSymbol = useAppStore((s) => s.setSymbol);
+  const setTimeframe = useAppStore((s) => s.setTimeframe);
   const { klinesRef, dataVersion, isLoading: klineLoading, error, bumpVersion } = useKlineData(symbol, timeframe);
+  const { price, changePct } = useRealtimePrice(symbol);
 
   // 移动端性能优化 - K 线数据降采样
   const { klines: optimizedKlines, isOptimized } = useChartPerformance({
@@ -116,6 +122,9 @@ const ChartWidget = memo(function ChartWidget() {
     });
   }, []);
 
+  // 使用实际 K 线数据（不是 ref），确保策略能响应数据变化
+  const currentKlines = isOptimized ? optimizedKlines : klinesRef.current;
+  
   const {
     activeStrategies,
     strategyOutputs,
@@ -128,7 +137,7 @@ const ChartWidget = memo(function ChartWidget() {
   } = useStrategyOverlay({
     chart: chartAPI?.chart ?? null,
     candleSeries: chartAPI?.candleSeries ?? null,
-    klines: klinesRef.current,
+    klines: currentKlines,
     symbol,
     chartReady: isChartReady,
     onAlert: handleAlert,
@@ -150,19 +159,31 @@ const ChartWidget = memo(function ChartWidget() {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full min-h-[200px] lg:min-h-[400px] relative"
+      className="w-full h-full min-h-[200px] lg:min-h-[400px] relative flex flex-col"
       style={{ background: "#111827" }}
     >
-      {/* Chart Canvas */}
-      <ChartCanvas
-        ref={chartCanvasRef}
-        klines={isOptimized ? optimizedKlines : klinesRef.current}
-        events={loadedFactors}
-        strategyOutputs={strategyOutputs}
-        onEventClick={handleEventClick}
+      {/* 移动端 TradingView 风格头部 */}
+      <MobileChartHeader
+        symbol={symbol}
+        price={price}
+        changePct={changePct}
         timeframe={timeframe}
-        dataVersion={dataVersion}
+        onTimeframeChange={(tf) => setTimeframe(tf as typeof timeframe)}
+        onSymbolChange={(s) => setSymbol(s as typeof symbol)}
       />
+
+      {/* Chart Canvas */}
+      <div className="flex-1 min-h-0 relative">
+        <ChartCanvas
+          ref={chartCanvasRef}
+          klines={isOptimized ? optimizedKlines : klinesRef.current}
+          events={loadedFactors}
+          strategyOutputs={strategyOutputs}
+          onEventClick={handleEventClick}
+          timeframe={timeframe}
+          dataVersion={dataVersion}
+        />
+      </div>
 
       {/* 移动端性能优化指示器 */}
       {isOptimized && (
@@ -226,6 +247,12 @@ const ChartWidget = memo(function ChartWidget() {
         alertToasts={alertToasts}
         onAlertToastsChange={setAlertToasts}
         klines={klinesRef.current}
+      />
+
+      {/* 移动端 TradingView 风格交易面板 */}
+      <MobileTradingPanel
+        price={price}
+        symbol={symbol}
       />
     </div>
   );

@@ -38,18 +38,24 @@ export function useStrategyOverlay({
   const workerRef = useRef<Worker | null>(null);
   const dataGenRef = useRef(0);
   const onAlertRef = useRef(onAlert);
+  const klinesRef = useRef(klines);
+  const chartRef = useRef(chart);
+  const candleSeriesRef = useRef(candleSeries);
 
   const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
   const [strategyOutputs, setStrategyOutputs] = useState<Map<string, StrategyOutput>>(new Map());
 
   const allStrategies = strategyRegistry.getDefinitions();
 
-  // Keep onAlert ref in sync
+  // 保持 ref 同步
   useEffect(() => {
     onAlertRef.current = onAlert;
-  }, [onAlert]);
+    klinesRef.current = klines;
+    chartRef.current = chart;
+    candleSeriesRef.current = candleSeries;
+  }, [onAlert, klines, chart, candleSeries]);
 
-  // Load from localStorage (once)
+  // 从 localStorage 加载策略（仅一次）
   useEffect(() => {
     const raw = localStorage.getItem("chartStrategies");
     if (raw) {
@@ -57,12 +63,12 @@ export function useStrategyOverlay({
       const valid = saved.filter((s) => strategyRegistry.get(s.id));
       if (valid.length) {
         setActiveStrategies(valid);
-        console.log(`[useStrategyOverlay] Restored ${valid.length} strategies from localStorage`);
+        console.log(`[useStrategyOverlay] 从 localStorage 恢复 ${valid.length} 个策略`);
       }
     }
   }, []);
 
-  // Save to localStorage
+  // 保存到 localStorage
   useEffect(() => {
     if (activeStrategies.length > 0) {
       localStorage.setItem("chartStrategies", safeSerializeStrategies(activeStrategies));
@@ -71,7 +77,7 @@ export function useStrategyOverlay({
     }
   }, [activeStrategies]);
 
-  // Init Worker (once)
+  // 初始化 Worker（仅一次）
   useEffect(() => {
     let worker: Worker | null = null;
     try {
@@ -97,14 +103,14 @@ export function useStrategyOverlay({
       pongPromise.then((ok) => {
         if (ok) {
           workerRef.current = worker;
-          console.log("[useStrategyOverlay] Strategy worker ready");
+          console.log("[useStrategyOverlay] Strategy worker 就绪");
         } else {
-          console.warn("[useStrategyOverlay] Worker ping timeout, using main thread");
+          console.warn("[useStrategyOverlay] Worker ping 超时，使用主线程");
           worker?.terminate();
         }
       });
     } catch (err) {
-      console.warn("[useStrategyOverlay] Failed to init strategy worker:", err);
+      console.warn("[useStrategyOverlay] 初始化 Worker 失败:", err);
       worker?.terminate();
     }
     return () => {
@@ -113,7 +119,7 @@ export function useStrategyOverlay({
     };
   }, []);
 
-  // Cleanup on unmount
+  // 卸载时清理
   useEffect(() => {
     const map = strategyLineRefs.current;
     return () => {
@@ -126,17 +132,8 @@ export function useStrategyOverlay({
     };
   }, [chart]);
 
-  // Calculate and draw strategies (with proper guards)
-  // 使用 ref 存储 klines 避免数组引用变化导致无限循环
-  const klinesRef = useRef(klines);
-  klinesRef.current = klines;
-  
-  // 使用 ref 存储 chart 和 candleSeries，避免引用变化导致无限循环
-  const chartRef = useRef(chart);
-  chartRef.current = chart;
-  const candleSeriesRef = useRef(candleSeries);
-  candleSeriesRef.current = candleSeries;
-
+  // 核心：计算和绘制策略
+  // 依赖 klines.length 确保数据更新时重新计算
   useEffect(() => {
     if (!klines.length || !chartReady) return;
     const currentChart = chartRef.current;
@@ -157,7 +154,7 @@ export function useStrategyOverlay({
 
       setStrategyOutputs(newOutputs);
 
-      // Alert triggers
+      // 触发预警
       const latestKlineTime = currentKlines.at(-1)?.time ?? 0;
       const recentWindow =
         latestKlineTime - (currentKlines.length > 3 ? currentKlines[currentKlines.length - 3].time : latestKlineTime);
@@ -177,7 +174,7 @@ export function useStrategyOverlay({
         }
       }
 
-      // Cleanup old lines
+      // 清理旧线条
       const chartInstance = chartRef.current;
       if (!chartInstance) return;
       const linesToRemove = Array.from(strategyLineRefs.current.entries());
@@ -189,7 +186,7 @@ export function useStrategyOverlay({
         }
       }
 
-      // Draw strategy lines
+      // 绘制策略线
       for (const [id, output] of newOutputs) {
         for (const line of output.lines) {
           const lineId = `${id}-${line.id}`;
@@ -213,7 +210,7 @@ export function useStrategyOverlay({
         }
       }
 
-      // Draw signal markers
+      // 绘制信号标记
       const allSignals = Array.from(newOutputs.values()).flatMap(
         (o: StrategyOutput) => o.signals
       );
@@ -236,11 +233,11 @@ export function useStrategyOverlay({
     return () => {
       cancelled = true;
     };
-  // 注意：chart 和 candleSeries 使用 ref 存储，不在依赖数组中
+  // 关键：依赖 klines.length 确保数据更新时重新计算策略
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStrategies, chartReady, symbol]);
+  }, [activeStrategies, klines.length, chartReady, symbol]);
 
-  // Cleanup when symbol/timeframe changes
+  // 交易对变化时清理
   useEffect(() => {
     const currentChart = chartRef.current;
     if (!currentChart) return;
@@ -327,7 +324,7 @@ export function useStrategyOverlay({
   };
 }
 
-// Strategy calculation helper
+// 策略计算辅助函数
 async function calculateStrategies(
   activeStrategies: ActiveStrategy[],
   klines: KlineData[],
@@ -372,7 +369,7 @@ async function calculateStrategies(
       activeStrategies.map((s) => s.id).filter((id) => !outputs.has(id))
     );
     if (failedIds.size > 0) {
-      console.warn(`[useStrategyOverlay] Worker missed ${failedIds.size} strategies, falling back to main thread`);
+      console.warn(`[useStrategyOverlay] Worker 失败 ${failedIds.size} 个策略，回退到主线程`);
       for (const as of activeStrategies) {
         if (!failedIds.has(as.id)) continue;
         const strategy = strategyRegistry.get(as.id);
@@ -381,7 +378,7 @@ async function calculateStrategies(
           const output = strategy.calculate({ klines, params: as.params });
           outputs.set(as.id, output);
         } catch (err) {
-          console.warn(`[useStrategyOverlay] ${as.id} main-thread calc failed:`, err);
+          console.warn(`[useStrategyOverlay] ${as.id} 主线程计算失败:`, err);
         }
       }
     }
@@ -393,7 +390,7 @@ async function calculateStrategies(
         const output = strategy.calculate({ klines, params: as.params });
         outputs.set(as.id, output);
       } catch (err) {
-        console.warn(`[useStrategyOverlay] ${as.id} calculation failed:`, err);
+        console.warn(`[useStrategyOverlay] ${as.id} 计算失败:`, err);
       }
     }
   }
