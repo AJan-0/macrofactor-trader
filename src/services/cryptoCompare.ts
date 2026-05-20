@@ -74,13 +74,18 @@ async function fetchWithRetry(
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url, { signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errMsg = `HTTP ${res.status} ${res.statusText}`;
+        console.warn(`[CryptoCompare] HTTP error (attempt ${i + 1}/${retries}): ${errMsg}`);
+        throw new Error(errMsg);
+      }
       return res;
     } catch (err: any) {
       if (err?.name === "AbortError") throw err;
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (i < retries - 1) {
         const delay = baseDelay * Math.pow(2, i);
+        console.log(`[CryptoCompare] Retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
         await new Promise(r => setTimeout(r, delay));
       }
     }
@@ -156,10 +161,21 @@ async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<Reco
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
   _lastCall = Date.now();
 
-  const res = await fetchWithRetry(url, signal);
-  const json = await res.json();
-  if (json.Response === "Error") throw new Error(json.Message || "CryptoCompare error");
-  return json;
+  try {
+    const res = await fetchWithRetry(url, signal);
+    const json = await res.json();
+    if (json.Response === "Error") {
+      const errMsg = json.Message || "CryptoCompare error";
+      console.error(`[CryptoCompare] API Error: ${errMsg}`, { url: url.split('?')[0], params: url.split('?')[1] });
+      throw new Error(errMsg);
+    }
+    return json;
+  } catch (err) {
+    if (err instanceof Error && err.name !== 'AbortError') {
+      console.error(`[CryptoCompare] Fetch failed:`, err.message, { url: url.split('?')[0] });
+    }
+    throw err;
+  }
 }
 
 /**

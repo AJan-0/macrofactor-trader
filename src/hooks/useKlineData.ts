@@ -96,8 +96,17 @@ export function useKlineData(
           return;
         }
         const msg = err instanceof Error ? err.message : 'Failed to load K-lines';
-        console.error('[useKlineData] ❌', msg);
-        if (klinesRef.current.length === 0) setError(msg);
+        console.error(`[useKlineData] ❌ ${symbol} ${timeframe}:`, msg, err);
+        // 增强错误消息，帮助用户理解问题
+        let userMsg = msg;
+        if (msg.includes('rate limit') || msg.includes('over your rate')) {
+          userMsg = 'API 请求频率限制，请稍后再试';
+        } else if (msg.includes('not valid') || msg.includes('invalid')) {
+          userMsg = 'API 配置错误，请联系管理员';
+        } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+          userMsg = '网络连接失败，请检查网络设置';
+        }
+        if (klinesRef.current.length === 0) setError(userMsg);
         setIsLoading(false);
       });
 
