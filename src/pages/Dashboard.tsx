@@ -40,7 +40,6 @@ function loadInitialFactorState(): FactorState {
 }
 
 export default function Dashboard() {
-  // ✅ 所有 hooks 必须在最顶部按照相同的顺序调用
   const events = useAppStore(s => s.events);
   const [{ factors, combo }, setFactorState] = useState<FactorState>(loadInitialFactorState);
   const [backtestRecords, setBacktestRecords] = useState<BacktestRecord[]>([]);
@@ -49,7 +48,6 @@ export default function Dashboard() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // 初始化异步回测数据
   useEffect(() => {
     loadBacktestData().then(records => {
       setBacktestRecords(records);
@@ -65,37 +63,30 @@ export default function Dashboard() {
     });
   }, []);
 
-  // 切换因子开关
   const toggleFactor = useCallback((id: string) => {
     updateFactors(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
   }, [updateFactors]);
 
-  // 调整概率
   const adjustProbability = useCallback((id: string, prob: number) => {
     updateFactors(prev => prev.map(f => f.id === id ? { ...f, probability: prob } : f));
   }, [updateFactors]);
 
-  // 调整权重
   const adjustWeight = useCallback((id: string, weight: number) => {
     updateFactors(prev => prev.map(f => f.id === id ? { ...f, weight } : f));
   }, [updateFactors]);
 
-  // 添加自定义因子
   const addCustom = useCallback((f: FactorItem) => {
     updateFactors(prev => [...prev, f]);
   }, [updateFactors]);
 
-  // 重置
   const handleReset = useCallback(() => {
     setFactorState(buildFactorState(resetToDefault()));
   }, []);
 
-  // 应用权重模板
   const handleApplyTemplate = useCallback((template: WeightTemplate) => {
     updateFactors(prev => applyWeightTemplate(prev, template));
   }, [updateFactors]);
 
-  // 批量操作
   const handleEnableAll = useCallback(() => {
     updateFactors(enableAll);
   }, [updateFactors]);
@@ -112,7 +103,6 @@ export default function Dashboard() {
     updateFactors(enableNextWeek);
   }, [updateFactors]);
 
-  // 移动端 Tab 切换时自动打开 Sheet
   const handleMobileTabChange = useCallback((tab: MobileTab) => {
     setMobileTab(tab);
     if (tab !== "chart") {
@@ -122,20 +112,17 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Sheet 关闭时如果当前不是 chart，切回 chart
   const handleSheetClose = useCallback(() => {
     setSheetOpen(false);
     setMobileTab("chart");
   }, []);
 
-  // Sheet 标题
   const sheetTitle =
     mobileTab === "factors" ? "因子面板"
     : mobileTab === "news" ? "新闻信息流"
     : mobileTab === "data" ? "回测数据"
     : "";
 
-  // Sheet 内容
   const sheetContent = (
     mobileTab === "factors" ? (
       <FactorDashboard
@@ -174,11 +161,9 @@ export default function Dashboard() {
     ) : null
   );
 
-  // 全屏模式支持
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggleFullscreen } = useFullscreen({ autoOnLandscape: true });
 
-  // 获取方向图标
   const DirectionIcon = combo.combinedDirection === "bullish" 
     ? TrendingUpIcon 
     : combo.combinedDirection === "bearish" 
@@ -192,19 +177,22 @@ export default function Dashboard() {
       : "text-[#94a3b8]";
 
   return (
-    <div className={`flex flex-col h-screen bg-[#0a0e1a] overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[100]' : ''}`}>
+    <div className={`flex flex-col h-[100dvh] bg-[#0a0e1a] overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[100]' : ''}`}>
       {/* 全屏模式下隐藏 Toolbar */}
-      {!isFullscreen && <Toolbar />}
+      {!isFullscreen && (
+        <div className="shrink-0">
+          <Toolbar />
+        </div>
+      )}
 
       {/* 桌面端：叙事栏 + 焦点事件 */}
-      <div className="hidden lg:block">
+      <div className="hidden lg:block shrink-0">
         <NarrativeBar combo={combo} lastUpdate={lastUpdate} />
         <UpcomingCalendar events={events} />
       </div>
 
       {/* 桌面端布局 */}
-      <div className="hidden lg:flex flex-1 overflow-hidden">
-        {/* 左侧：图表区域 */}
+      <div className="hidden lg:flex flex-1 overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 p-2 pb-0 min-h-0">
             <div className="h-full rounded-lg border border-[#1e293b] bg-[#111827] overflow-hidden">
@@ -215,8 +203,7 @@ export default function Dashboard() {
           </div>
           <FactorTimeline />
         </div>
-        {/* 右侧：因子面板 */}
-        <div className="w-[30%] min-w-[300px] max-w-[400px] border-l border-[#1e293b]">
+        <div className="w-[30%] min-w-[300px] max-w-[400px] border-l border-[#1e293b] overflow-y-auto">
           <ErrorBoundary>
             <FactorDashboard
               combo={combo}
@@ -241,11 +228,11 @@ export default function Dashboard() {
       {/* 移动端布局 */}
       <div 
         ref={chartContainerRef}
-        className={`lg:hidden flex-1 flex flex-col min-h-0 ${isFullscreen ? 'pb-0' : 'pb-14 md:pb-0'}`}
+        className={`lg:hidden flex-1 flex flex-col min-h-0 ${isFullscreen ? 'pb-0' : 'pb-[calc(52px+env(safe-area-inset-bottom))]'}`}
       >
         {/* 移动端叙事摘要 - 全屏时隐藏 */}
         {!isFullscreen && combo && (
-          <div className="px-3 py-2 border-b border-[#1e293b]/60 bg-[#0a0e1a] flex items-center gap-3 overflow-x-auto scrollbar-hide">
+          <div className="shrink-0 px-3 py-2 border-b border-[#1e293b]/60 bg-[#0a0e1a] flex items-center gap-3 overflow-x-auto scrollbar-hide">
             <div className={`flex items-center gap-1 shrink-0 ${directionColor}`}>
               <DirectionIcon size={14} />
               <span className="text-xs font-bold">
@@ -258,7 +245,6 @@ export default function Dashboard() {
               <span>{combo.enabledCount}/{combo.totalCount} 因子</span>
             </div>
             
-            {/* 全屏切换按钮 */}
             <button
               onClick={() => toggleFullscreen(chartContainerRef.current || undefined)}
               className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-[#1a2236] border border-[#2d3a52] text-[#475569] active:scale-90 transition-transform"
@@ -277,7 +263,6 @@ export default function Dashboard() {
             <ChartWidget />
           </ErrorBoundary>
           
-          {/* 全屏退出按钮 */}
           {isFullscreen && (
             <button
               onClick={() => toggleFullscreen()}
@@ -290,7 +275,11 @@ export default function Dashboard() {
       </div>
 
       {/* 移动端底部导航 - 全屏时隐藏 */}
-      {!isFullscreen && <MobileNav active={mobileTab} onChange={handleMobileTabChange} />}
+      {!isFullscreen && (
+        <div className="lg:hidden shrink-0">
+          <MobileNav active={mobileTab} onChange={handleMobileTabChange} />
+        </div>
+      )}
 
       {/* 移动端底部 Sheet */}
       <MobileSheet

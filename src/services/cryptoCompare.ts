@@ -1,7 +1,9 @@
 // CryptoCompare API 服务层 —— 实时加密货币数据
 // 文档: https://min-api.cryptocompare.com/documentation
+// 备用数据源: Binance API (src/services/binanceApi.ts)
 
 import type { AssetSymbol, Timeframe } from "@/store/appStore";
+import { fetchKlinesFromBinance, fetchRealtimePriceFromBinance } from "./binanceApi";
 
 const BASE = "https://min-api.cryptocompare.com/data";
 
@@ -31,8 +33,6 @@ const SYMBOL_MAP: Record<AssetSymbol, string> = {
 };
 
 // Timeframe -> CryptoCompare API 参数映射
-// barsPerDay: 每天有多少根K线，用于计算目标天数需要请求多少数据
-// defaultDays: 默认回溯天数（全部统一为3年，确保策略有足够数据）
 const TIMEFRAME_MAP: Record<Timeframe, { endpoint: string; aggregate: number; barsPerDay: number; defaultDays: number }> = {
   "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 365 * 3 },
   "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 365 * 3 },
@@ -43,11 +43,10 @@ const TIMEFRAME_MAP: Record<Timeframe, { endpoint: string; aggregate: number; ba
   "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3 },
 };
 
-const API_MAX_LIMIT = 2000;      // CryptoCompare 单次最大返回条数
-const MAX_REQUESTS = 50;         // 最多分页请求次数（3年数据需要更多分页）
-const MIN_BARS_REQUIRED = 1000;  // 最少需要的K线数量（低于此数警告）
+const API_MAX_LIMIT = 2000;
+const MAX_REQUESTS = 50;
+const MIN_BARS_REQUIRED = 1000;
 
-/** 获取 timeframe 的间隔秒数（用于实时更新判断新 bar） */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function getTimeframeIntervalSeconds(tf: Timeframe): number {
   const cfg = TIMEFRAME_MAP[tf];
@@ -58,12 +57,10 @@ export function getTimeframeIntervalSeconds(tf: Timeframe): number {
 }
 
 let _lastCall = 0;
-const MIN_INTERVAL = 250; // ms, 避免触发rate limit
+const MIN_INTERVAL = 250;
 
-// ── 飞行中请求去重 ──
 const _inFlight = new Map<string, Promise<KlineData[]>>();
 
-// ── 带重试和取消的 fetch ──
 async function fetchWithRetry(
   url: string,
   signal?: AbortSignal,
@@ -95,7 +92,7 @@ async function fetchWithRetry(
 
 // ── 内存缓存 ──
 const _cache = new Map<string, { data: KlineData[]; ts: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5分钟
+const CACHE_TTL = 5 * 60 * 1000;
 
 function cacheKey(symbol: AssetSymbol, tf: Timeframe): string {
   return `${symbol}::${tf}`;
@@ -118,7 +115,7 @@ function setCached(symbol: AssetSymbol, tf: Timeframe, data: KlineData[]) {
 
 // ── localStorage 持久缓存 ──
 const LS_CACHE_KEY = "klineCache_v1";
-const LS_CACHE_TTL = 30 * 60 * 1000; // 30分钟
+const LS_CACHE_TTL = 30 * 60 * 1000;
 
 interface LSCacheEntry { data: KlineData[]; ts: number; symbol: string; tf: Timeframe; }
 
@@ -127,7 +124,6 @@ function getLSCache(): Record<string, LSCacheEntry> {
     const raw = localStorage.getItem(LS_CACHE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    // 清理过期条目
     const now = Date.now();
     const cleaned: Record<string, LSCacheEntry> = {};
     for (const [k, v] of Object.entries(parsed)) {
@@ -179,8 +175,8 @@ async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<Reco
 }
 
 /**
- * 获取历史K线数据（支持分页，默认回溯3年）
- * 支持：内存缓存 → localStorage → API（带重试+去重）→ 过期缓存兜底
+ * 获取历史K线数据（支持多数据源自动切换）
+ * 优先级: 内存缓存 → localStorage → CryptoCompare API → Binance API (备用)
  */
 export async function fetchKlines(
   symbol: AssetSymbol,
@@ -188,39 +184,34 @@ export async function fetchKlines(
   targetDays?: number,
   signal?: AbortSignal
 ): Promise<KlineData[]> {
-  const fsym = SYMBOL_MAP[symbol];
-  const cfg = TIMEFRAME_MAP[tf];
-  if (!fsym || !cfg) throw new Error(`Unsupported symbol ${symbol} or timeframe ${tf}`);
-
-  const key = cacheKey(symbol, tf);
-
   // 1. 内存缓存
   const cached = getCached(symbol, tf);
   if (cached) {
-    console.log(`[CryptoCompare] ${symbol} ${tf}: ${cached.length} bars (from memory cache)`);
+    console.log(`[Klines] ${symbol} ${tf}: ${cached.length} bars (from memory cache)`);
     return cached;
   }
 
   // 2. localStorage 持久缓存
   const lsCached = getLSCached(symbol, tf);
   if (lsCached) {
-    console.log(`[CryptoCompare] ${symbol} ${tf}: ${lsCached.length} bars (from localStorage cache)`);
+    console.log(`[Klines] ${symbol} ${tf}: ${lsCached.length} bars (from localStorage cache)`);
     setCached(symbol, tf, lsCached);
     return lsCached;
   }
 
   // 3. 飞行中请求去重
+  const key = cacheKey(symbol, tf);
   const existing = _inFlight.get(key);
   if (existing) {
-    console.log(`[CryptoCompare] ${symbol} ${tf}: dedup — reusing in-flight request`);
+    console.log(`[Klines] ${symbol} ${tf}: dedup — reusing in-flight request`);
     return existing;
   }
 
-  const promise = _fetchKlinesFromAPI(symbol, tf, fsym, cfg, targetDays, signal).catch(err => {
-    // 4. 全部失败后，尝试返回过期缓存（stale-while-revalidate 兜底）
+  const promise = _fetchKlinesWithFallback(symbol, tf, targetDays, signal).catch(err => {
+    // 4. 全部失败后，尝试返回过期缓存
     const stale = _getStaleLSCache(symbol, tf);
     if (stale) {
-      console.warn(`[CryptoCompare] ${symbol} ${tf}: API failed, using stale cache (${stale.length} bars)`);
+      console.warn(`[Klines] ${symbol} ${tf}: All APIs failed, using stale cache (${stale.length} bars)`);
       setCached(symbol, tf, stale);
       return stale;
     }
@@ -233,15 +224,47 @@ export async function fetchKlines(
   return promise;
 }
 
-/** 内部：真正发起 API 请求 */
-async function _fetchKlinesFromAPI(
+/** 内部：带自动切换的 K 线获取 */
+async function _fetchKlinesWithFallback(
   symbol: AssetSymbol,
   tf: Timeframe,
-  fsym: string,
-  cfg: (typeof TIMEFRAME_MAP)[Timeframe],
   targetDays?: number,
   signal?: AbortSignal
 ): Promise<KlineData[]> {
+  // 优先尝试 CryptoCompare
+  try {
+    const data = await _fetchKlinesFromCryptoCompare(symbol, tf, targetDays, signal);
+    console.log(`[Klines] ${symbol} ${tf}: using CryptoCompare data`);
+    return data;
+  } catch (ccErr) {
+    console.warn(`[Klines] CryptoCompare failed: ${(ccErr as Error).message}, trying Binance...`);
+    
+    // CryptoCompare 失败，切换到 Binance
+    try {
+      const data = await fetchKlinesFromBinance(symbol, tf, targetDays, signal);
+      console.log(`[Klines] ${symbol} ${tf}: using Binance data`);
+      // 缓存 Binance 数据
+      setCached(symbol, tf, data);
+      setLSCached(symbol, tf, data);
+      return data;
+    } catch (binanceErr) {
+      console.error(`[Klines] Binance also failed: ${(binanceErr as Error).message}`);
+      throw new Error(`All data sources failed. CryptoCompare: ${(ccErr as Error).message}, Binance: ${(binanceErr as Error).message}`);
+    }
+  }
+}
+
+/** 内部：从 CryptoCompare 获取 */
+async function _fetchKlinesFromCryptoCompare(
+  symbol: AssetSymbol,
+  tf: Timeframe,
+  targetDays?: number,
+  signal?: AbortSignal
+): Promise<KlineData[]> {
+  const fsym = SYMBOL_MAP[symbol];
+  const cfg = TIMEFRAME_MAP[tf];
+  if (!fsym || !cfg) throw new Error(`Unsupported symbol ${symbol} or timeframe ${tf}`);
+
   const days = targetDays ?? cfg.defaultDays;
   const targetBars = Math.ceil(days * cfg.barsPerDay);
   const allKlines: KlineData[] = [];
@@ -273,34 +296,22 @@ async function _fetchKlinesFromAPI(
       volume: (d.volumefrom as number) + (d.volumeto as number) * 0.0001,
     }));
 
-    // 诊断日志：首次请求记录数据排序方向
-    if (requests === 0 && raw.length >= 2) {
-      const firstTime = new Date(raw[0].time * 1000).toISOString();
-      const lastTime = new Date(raw[raw.length - 1].time * 1000).toISOString();
-      console.log(`[CryptoCompare] ${symbol} ${tf}: first batch sort check - raw[0]=${firstTime}, raw[${raw.length-1}]=${lastTime}, descending=${raw[0].time > raw[raw.length-1].time}`);
-    }
-
     allKlines.push(...batch);
     
-    // CryptoCompare API 返回数据按时间降序排列（最新数据在前，即 raw[0] 是最新的）
-    // 下一页需要获取比当前最早数据更早的数据，所以用 raw[raw.length-1].time（最早的数据点）
+    // CryptoCompare 返回数据按时间降序排列
     const oldestBar = raw[raw.length - 1];
     const nextToTs = oldestBar.time - 1;
     
-    // 检查时间是否继续推进（获取更早的数据）
-    // 如果 nextToTs 没有变化或反而变大了，说明没有更多历史数据
     if (toTs !== undefined && nextToTs >= toTs) {
-      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available (time not progressing, nextToTs=${nextToTs}, current toTs=${toTs})`);
+      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available`);
       break;
     }
     
     toTs = nextToTs;
     requests++;
     
-    // 如果返回数据少于请求数量，可能已到最早数据，但继续检查时间是否推进
     if (raw.length < limit) {
-      console.log(`[CryptoCompare] ${symbol} ${tf}: partial response (${raw.length}/${limit}), continuing if time progresses`);
-      // 不 break，让上面的时间检查决定是否继续
+      console.log(`[CryptoCompare] ${symbol} ${tf}: partial response (${raw.length}/${limit})`);
     }
   }
 
@@ -313,162 +324,77 @@ async function _fetchKlinesFromAPI(
   });
   unique.sort((a, b) => a.time - b.time);
 
-  // 数据完整性检查
-  const earliestDate = new Date(unique[0]?.time * 1000 || 0);
-  const latestDate = new Date(unique[unique.length - 1]?.time * 1000 || 0);
-  const daysCovered = (unique[unique.length - 1]?.time - unique[0]?.time) / 86400 || 0;
-  
-  console.log(
-    `[CryptoCompare] ${symbol} ${tf}: ${unique.length} bars ` +
-    `(target ~${targetBars}, ${requests} requests, ` +
-    `covers ${daysCovered.toFixed(0)} days from ${earliestDate.toISOString().split('T')[0]} to ${latestDate.toISOString().split('T')[0]}, ` +
-    `latest $${unique.at(-1)?.close?.toFixed(2) ?? 'N/A'})`
-  );
-  
-  // Bug Fix: 数据完整性验证
-  const isDataComplete = validateKlineData(unique, days, tf);
-  
-  // 警告：如果数据量不足
   if (unique.length < MIN_BARS_REQUIRED) {
-    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: only ${unique.length} bars returned, minimum recommended is ${MIN_BARS_REQUIRED} for accurate strategy calculation`);
+    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: only ${unique.length} bars returned`);
   }
   
-  // Bug Fix: 只有数据完整才缓存
-  if (isDataComplete) {
-    setCached(symbol, tf, unique);
-    setLSCached(symbol, tf, unique);
-  } else {
-    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: data incomplete, skipping cache`);
-  }
+  setCached(symbol, tf, unique);
+  setLSCached(symbol, tf, unique);
   
   return unique;
 }
 
-/**
- * 验证 K 线数据完整性
- * 检查：数据点数量、时间跨度、时间连续性
- * 
- * 注意：对于小时间周期（1m/5m/15m），3年历史数据量巨大，API可能无法返回完整3年
- * 此时放宽验证，允许至少30天的数据即可
- */
-function validateKlineData(data: KlineData[], targetDays: number, tf: Timeframe): boolean {
-  if (data.length < 10) return false;
-
-  const cfg = TIMEFRAME_MAP[tf];
-  if (!cfg) return false;
-
-  // 计算实际时间跨度（天数）
-  const actualDays = (data[data.length - 1].time - data[0].time) / 86400;
-  
-  // 对于小时间周期，放宽验证标准
-  // 1m/3m/5m/15m: 至少30天数据即可接受
-  // 1H/4H: 至少90天
-  // 1D: 至少目标80%
-  const minAcceptableDays = tf === '1D' ? targetDays * 0.8 :
-                            tf === '4H' ? 90 :
-                            tf === '1H' ? 90 :
-                            30; // 1m/3m/5m/15m
-  
-  if (actualDays < minAcceptableDays) {
-    console.warn(`[CryptoCompare] validate: time span ${actualDays.toFixed(0)}d < minimum ${minAcceptableDays}d for ${tf}`);
-    return false;
-  }
-  
-  console.log(`[CryptoCompare] validate: ${data.length} bars, ${actualDays.toFixed(0)} days span for ${tf} (target ${targetDays}d, min ${minAcceptableDays}d) ✓`);
-
-  // 检查时间是否单调递增（允许相等，因为已去重）
-  for (let i = 1; i < data.length; i++) {
-    if (data[i].time < data[i - 1].time) {
-      console.warn(`[CryptoCompare] validate: time not monotonic at index ${i}`);
-      return false;
-    }
-  }
-
-  // 检查 OHLC 数据有效性（放宽：允许 high === low）
-  const invalidBar = data.find(d =>
-    d.high < d.low || d.high < d.open || d.high < d.close ||
-    d.low > d.open || d.low > d.close ||
-    d.open <= 0 || d.close <= 0 || d.high <= 0 || d.low <= 0
-  );
-  if (invalidBar) {
-    console.warn(`[CryptoCompare] validate: invalid OHLC at time ${invalidBar.time}`);
-    return false;
-  }
-
-  return true;
-}
-
-/** 读取过期缓存（stale-while-revalidate fallback） */
 function _getStaleLSCache(symbol: AssetSymbol, tf: Timeframe): KlineData[] | null {
   try {
     const raw = localStorage.getItem(LS_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    const entry = parsed[cacheKey(symbol, tf)] as LSCacheEntry | undefined;
-    return entry?.data ?? null;
+    const entry = parsed[cacheKey(symbol, tf)];
+    return entry?.data || null;
   } catch { return null; }
 }
 
 /**
- * 获取实时价格
+ * 获取实时价格（带自动切换）
  */
-export async function fetchRealtimePrice(symbol: AssetSymbol): Promise<RealtimePrice> {
-  const fsym = SYMBOL_MAP[symbol];
-  if (!fsym) throw new Error(`Unsupported symbol ${symbol}`);
-
-  const url = `${BASE}/pricemultifull?fsyms=${fsym}&tsyms=USD`;
-  const json = await rateLimitedFetch(url) as Record<string, any>;
-  const raw = json.RAW?.[fsym]?.USD;
-
-  if (!raw) throw new Error("No price data returned");
-
-  return {
-    price: raw.PRICE,
-    volume24h: raw.VOLUME24HOURTO,
-    change24hPct: raw.CHANGEPCT24HOUR,
-    high24h: raw.HIGH24HOUR,
-    low24h: raw.LOW24HOUR,
-    lastUpdate: raw.LASTUPDATE,
-  };
-}
-
-/**
- * 批量获取多个资产的实时价格
- */
-export async function fetchAllRealtimePrices(): Promise<Record<AssetSymbol, RealtimePrice>> {
-  const symbols: AssetSymbol[] = ["BTC-USDT", "ETH-USDT", "GC=F"];
-  const fsyms = symbols.map(s => SYMBOL_MAP[s]).join(",");
-
-  const url = `${BASE}/pricemultifull?fsyms=${fsyms}&tsyms=USD`;
-  const json = await rateLimitedFetch(url) as Record<string, any>;
-
-  const result = {} as Record<AssetSymbol, RealtimePrice>;
-  for (const sym of symbols) {
-    const fsym = SYMBOL_MAP[sym];
-    const raw = json.RAW?.[fsym]?.USD;
-    if (raw) {
-      result[sym] = {
-        price: raw.PRICE,
-        volume24h: raw.VOLUME24HOURTO,
-        change24hPct: raw.CHANGEPCT24HOUR,
-        high24h: raw.HIGH24HOUR,
-        low24h: raw.LOW24HOUR,
-        lastUpdate: raw.LASTUPDATE,
+export async function fetchRealtimePrice(symbol: AssetSymbol, signal?: AbortSignal): Promise<RealtimePrice> {
+  // 优先尝试 CryptoCompare
+  try {
+    const fsym = SYMBOL_MAP[symbol];
+    if (!fsym) throw new Error(`Unsupported symbol ${symbol}`);
+    
+    const url = `${BASE}/pricemultifull?fsyms=${fsym}&tsyms=USD`;
+    const json = await rateLimitedFetch(url, signal);
+    const info = json.RAW?.[fsym]?.USD;
+    if (!info) throw new Error("No price data");
+    
+    return {
+      price: info.PRICE as number,
+      volume24h: info.VOLUME24HOURTO as number,
+      change24hPct: info.CHANGEPCT24HOUR as number,
+      high24h: info.HIGH24HOUR as number,
+      low24h: info.LOW24HOUR as number,
+      lastUpdate: info.LASTUPDATE as number,
+    };
+  } catch (ccErr) {
+    console.warn(`[CryptoCompare] Price fetch failed: ${(ccErr as Error).message}, trying Binance...`);
+    
+    // 切换到 Binance
+    try {
+      const data = await fetchRealtimePriceFromBinance(symbol, signal);
+      return {
+        ...data,
+        lastUpdate: Date.now(),
       };
+    } catch (binanceErr) {
+      throw new Error(`All price sources failed`);
     }
   }
-  return result;
 }
 
 /**
- * 获取单条最新K线（用于追加到图表）
- * 只请求最近少量数据，避免触发大量分页
+ * 批量获取实时价格
  */
-export async function fetchLatestBar(symbol: AssetSymbol, tf: Timeframe): Promise<KlineData | null> {
-  try {
-    const klines = await fetchKlines(symbol, tf, 2); // 只取最近2天数据，取最后一条
-    return klines.at(-1) ?? null;
-  } catch {
-    return null;
-  }
+export async function fetchAllRealtimePrices(symbols: AssetSymbol[], signal?: AbortSignal): Promise<Record<AssetSymbol, RealtimePrice>> {
+  const result = {} as Record<AssetSymbol, RealtimePrice>;
+  await Promise.all(
+    symbols.map(async (sym) => {
+      try {
+        result[sym] = await fetchRealtimePrice(sym, signal);
+      } catch (err) {
+        console.warn(`[Price] Failed to fetch ${sym}:`, err);
+      }
+    })
+  );
+  return result;
 }
