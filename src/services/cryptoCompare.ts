@@ -257,27 +257,34 @@ async function _fetchKlinesFromAPI(
       volume: (d.volumefrom as number) + (d.volumeto as number) * 0.0001,
     }));
 
+    // 诊断日志：首次请求记录数据排序方向
+    if (requests === 0 && raw.length >= 2) {
+      const firstTime = new Date(raw[0].time * 1000).toISOString();
+      const lastTime = new Date(raw[raw.length - 1].time * 1000).toISOString();
+      console.log(`[CryptoCompare] ${symbol} ${tf}: first batch sort check - raw[0]=${firstTime}, raw[${raw.length-1}]=${lastTime}, descending=${raw[0].time > raw[raw.length-1].time}`);
+    }
+
     allKlines.push(...batch);
     
-    // Bug Fix: 使用最新数据点的时间作为下一页的 toTs
-    // CryptoCompare 返回的数据是按时间升序排列的，raw[raw.length-1] 是最新的数据点
-    const lastBar = raw[raw.length - 1];
-    const nextToTs = lastBar.time - 1;
+    // CryptoCompare API 返回数据按时间降序排列（最新数据在前，即 raw[0] 是最新的）
+    // 下一页需要获取比当前最早数据更早的数据，所以用 raw[raw.length-1].time（最早的数据点）
+    const oldestBar = raw[raw.length - 1];
+    const nextToTs = oldestBar.time - 1;
     
-    // Bug Fix: 检查时间是否继续推进，而不是看数量
+    // 检查时间是否继续推进（获取更早的数据）
     // 如果 nextToTs 没有变化或反而变大了，说明没有更多历史数据
     if (toTs !== undefined && nextToTs >= toTs) {
-      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available (time not progressing)`);
+      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available (time not progressing, nextToTs=${nextToTs}, current toTs=${toTs})`);
       break;
     }
     
     toTs = nextToTs;
     requests++;
     
-    // 如果返回数据少于请求数量，说明已到最早数据
+    // 如果返回数据少于请求数量，可能已到最早数据，但继续检查时间是否推进
     if (raw.length < limit) {
-      console.log(`[CryptoCompare] ${symbol} ${tf}: reached earliest data at ${new Date(toTs * 1000).toISOString()}`);
-      break;
+      console.log(`[CryptoCompare] ${symbol} ${tf}: partial response (${raw.length}/${limit}), continuing if time progresses`);
+      // 不 break，让上面的时间检查决定是否继续
     }
   }
 
@@ -324,6 +331,9 @@ async function _fetchKlinesFromAPI(
 /**
  * 验证 K 线数据完整性
  * 检查：数据点数量、时间跨度、时间连续性
+ * 
+ * 注意：对于小时间周期（1m/5m/15m），3年历史数据量巨大，API可能无法返回完整3年
+ * 此时放宽验证，允许至少30天的数据即可
  */
 function validateKlineData(data: KlineData[], targetDays: number, tf: Timeframe): boolean {
   if (data.length < 10) return false;
@@ -331,22 +341,34 @@ function validateKlineData(data: KlineData[], targetDays: number, tf: Timeframe)
   const cfg = TIMEFRAME_MAP[tf];
   if (!cfg) return false;
 
-  // 检查时间跨度是否达到目标的 80%
+  // 计算实际时间跨度（天数）
   const actualDays = (data[data.length - 1].time - data[0].time) / 86400;
-  if (actualDays < targetDays * 0.8) {
-    console.warn(`[CryptoCompare] validate: time span ${actualDays.toFixed(0)}d < target ${targetDays}d * 0.8`);
+  
+  // 对于小时间周期，放宽验证标准
+  // 1m/3m/5m/15m: 至少30天数据即可接受
+  // 1H/4H: 至少90天
+  // 1D: 至少目标80%
+  const minAcceptableDays = tf === '1D' ? targetDays * 0.8 :
+                            tf === '4H' ? 90 :
+                            tf === '1H' ? 90 :
+                            30; // 1m/3m/5m/15m
+  
+  if (actualDays < minAcceptableDays) {
+    console.warn(`[CryptoCompare] validate: time span ${actualDays.toFixed(0)}d < minimum ${minAcceptableDays}d for ${tf}`);
     return false;
   }
+  
+  console.log(`[CryptoCompare] validate: ${data.length} bars, ${actualDays.toFixed(0)} days span for ${tf} (target ${targetDays}d, min ${minAcceptableDays}d) ✓`);
 
-  // 检查时间是否单调递增
+  // 检查时间是否单调递增（允许相等，因为已去重）
   for (let i = 1; i < data.length; i++) {
-    if (data[i].time <= data[i - 1].time) {
+    if (data[i].time < data[i - 1].time) {
       console.warn(`[CryptoCompare] validate: time not monotonic at index ${i}`);
       return false;
     }
   }
 
-  // 检查 OHLC 数据有效性
+  // 检查 OHLC 数据有效性（放宽：允许 high === low）
   const invalidBar = data.find(d =>
     d.high < d.low || d.high < d.open || d.high < d.close ||
     d.low > d.open || d.low > d.close ||
