@@ -11,6 +11,7 @@ import MobileSheet from "@/components/MobileSheet";
 import NewsFeed from "@/components/NewsFeed";
 import { useAppStore } from "@/store/appStore";
 import { useFullscreen } from "@/hooks/useFullscreen";
+import { TrendingUpIcon, TrendingDownIcon, MinusIcon, FullscreenIcon, FullscreenExitIcon } from "@/components/icons";
 import {
   loadUserFactors, saveUserFactors, resetToDefault, applyWeightTemplate,
   enableAll, disableAll, enableThisWeek, enableNextWeek,
@@ -177,6 +178,19 @@ export default function Dashboard() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggleFullscreen } = useFullscreen({ autoOnLandscape: true });
 
+  // 获取方向图标
+  const DirectionIcon = combo.combinedDirection === "bullish" 
+    ? TrendingUpIcon 
+    : combo.combinedDirection === "bearish" 
+      ? TrendingDownIcon 
+      : MinusIcon;
+
+  const directionColor = combo.combinedDirection === "bullish" 
+    ? "text-[#22c55e]" 
+    : combo.combinedDirection === "bearish" 
+      ? "text-[#ef4444]" 
+      : "text-[#94a3b8]";
+
   return (
     <div className={`flex flex-col h-screen bg-[#0a0e1a] overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[100]' : ''}`}>
       {/* 全屏模式下隐藏 Toolbar */}
@@ -229,25 +243,27 @@ export default function Dashboard() {
         ref={chartContainerRef}
         className={`lg:hidden flex-1 flex flex-col min-h-0 ${isFullscreen ? 'pb-0' : 'pb-14 md:pb-0'}`}
       >
-        {/* 移动端叙事摘要（精简） - 全屏时隐藏 */}
+        {/* 移动端叙事摘要 - 全屏时隐藏 */}
         {!isFullscreen && combo && (
-          <div className="px-3 py-2 md:py-2.5 border-b border-[#1e293b] bg-[#0a0e1a] flex items-center gap-2 overflow-x-auto scrollbar-hide text-xs md:text-sm">
-            <span className={`font-bold shrink-0 ${combo.combinedDirection === "bullish" ? "text-[#22c55e]" : combo.combinedDirection === "bearish" ? "text-[#ef4444]" : "text-[#94a3b8]"}`}>
-              {combo.combinedDirection === "bullish" ? "▲ 偏多" : combo.combinedDirection === "bearish" ? "▼ 偏空" : "◆ 中性"}
-            </span>
-            <span className="text-[#475569] shrink-0">
-              置信度 {combo.overallConfidence.toFixed(0)}%
-            </span>
-            <span className="text-[#475569] shrink-0">
-              {combo.enabledCount}/{combo.totalCount} 因子
-            </span>
+          <div className="px-3 py-2 border-b border-[#1e293b]/60 bg-[#0a0e1a] flex items-center gap-3 overflow-x-auto scrollbar-hide">
+            <div className={`flex items-center gap-1 shrink-0 ${directionColor}`}>
+              <DirectionIcon size={14} />
+              <span className="text-xs font-bold">
+                {combo.combinedDirection === "bullish" ? "偏多" : combo.combinedDirection === "bearish" ? "偏空" : "中性"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-[#475569] shrink-0">
+              <span>置信度 {combo.overallConfidence.toFixed(0)}%</span>
+              <span className="text-[#1e293b]">|</span>
+              <span>{combo.enabledCount}/{combo.totalCount} 因子</span>
+            </div>
             
             {/* 全屏切换按钮 */}
             <button
               onClick={() => toggleFullscreen(chartContainerRef.current || undefined)}
-              className="ml-auto text-[10px] px-2 py-1 rounded bg-[#1a2236] text-[#94a3b8] border border-[#2d3a52] active:scale-90 transition-transform"
+              className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-[#1a2236] border border-[#2d3a52] text-[#475569] active:scale-90 transition-transform"
             >
-              {isFullscreen ? "⛶" : "⛶"}
+              {isFullscreen ? <FullscreenExitIcon size={14} /> : <FullscreenIcon size={14} />}
             </button>
           </div>
         )}
@@ -255,7 +271,7 @@ export default function Dashboard() {
         {/* 焦点事件（精简单行） - 全屏时隐藏 */}
         {!isFullscreen && <UpcomingCalendar events={events} />}
 
-        {/* 图表区域 - 动态高度 */}
+        {/* 图表区域 */}
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <ErrorBoundary>
             <ChartWidget />
@@ -267,7 +283,7 @@ export default function Dashboard() {
               onClick={() => toggleFullscreen()}
               className="absolute top-3 right-3 z-50 w-9 h-9 rounded-lg bg-[#1a2236]/90 border border-[#2d3a52] text-[#94a3b8] flex items-center justify-center shadow-lg backdrop-blur-sm active:scale-90 transition-transform"
             >
-              ⛶
+              <FullscreenExitIcon size={16} />
             </button>
           )}
         </div>
