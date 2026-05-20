@@ -29,29 +29,23 @@ export interface RealtimePrice {
 const SYMBOL_MAP: Record<AssetSymbol, string> = {
   "BTC-USDT": "BTC",
   "ETH-USDT": "ETH",
-  "GC=F": "PAXG",
+  "GC=F": "PAXG", // PAXG = Paxos Gold, 1:1 锚定实物黄金
 };
 
 // Timeframe -> CryptoCompare API 参数映射
-// 根据时间周期调整默认请求天数，避免请求过多数据导致超时
-const TIMEFRAME_MAP: Record<Timeframe, { 
-  endpoint: string; 
-  aggregate: number; 
-  barsPerDay: number; 
-  defaultDays: number;  // 根据周期自动调整
-  maxRequests: number;  // 根据周期调整最大请求次数
-}> = {
-  "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 7,   maxRequests: 10 },   // 7天 = 10,080 条
-  "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 30,  maxRequests: 15 },   // 30天 = 14,400 条
-  "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 30,  maxRequests: 10 },   // 30天 = 8,640 条
-  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 90,  maxRequests: 10 },   // 90天 = 8,640 条
-  "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 365, maxRequests: 10 },   // 1年 = 8,760 条
-  "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365, maxRequests: 10 },   // 1年 = 2,190 条
-  "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3, maxRequests: 20 }, // 3年 = 1,095 条
+const TIMEFRAME_MAP: Record<Timeframe, { endpoint: string; aggregate: number; barsPerDay: number; defaultDays: number }> = {
+  "1m":  { endpoint: "histominute", aggregate: 1,  barsPerDay: 24 * 60, defaultDays: 365 * 3 },
+  "3m":  { endpoint: "histominute", aggregate: 3,  barsPerDay: 24 * 20, defaultDays: 365 * 3 },
+  "5m":  { endpoint: "histominute", aggregate: 5,  barsPerDay: 24 * 12, defaultDays: 365 * 3 },
+  "15m": { endpoint: "histominute", aggregate: 15, barsPerDay: 96,      defaultDays: 365 * 3 },
+  "1H":  { endpoint: "histohour",   aggregate: 1,  barsPerDay: 24,      defaultDays: 365 * 3 },
+  "4H":  { endpoint: "histohour",   aggregate: 4,  barsPerDay: 6,       defaultDays: 365 * 3 },
+  "1D":  { endpoint: "histoday",    aggregate: 1,  barsPerDay: 1,       defaultDays: 365 * 3 },
 };
 
 const API_MAX_LIMIT = 2000;
-const MIN_BARS_REQUIRED = 100;
+const MAX_REQUESTS = 50;
+const MIN_BARS_REQUIRED = 1000;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function getTimeframeIntervalSeconds(tf: Timeframe): number {
@@ -240,7 +234,7 @@ async function _fetchKlinesWithFallback(
   // 优先尝试 CryptoCompare
   try {
     const data = await _fetchKlinesFromCryptoCompare(symbol, tf, targetDays, signal);
-    console.log(`[Klines] ${symbol} ${tf}: using CryptoCompare data (${data.length} bars)`);
+    console.log(`[Klines] ${symbol} ${tf}: using CryptoCompare data`);
     return data;
   } catch (ccErr) {
     console.warn(`[Klines] CryptoCompare failed: ${(ccErr as Error).message}, trying Binance...`);
@@ -248,7 +242,7 @@ async function _fetchKlinesWithFallback(
     // CryptoCompare 失败，切换到 Binance
     try {
       const data = await fetchKlinesFromBinance(symbol, tf, targetDays, signal);
-      console.log(`[Klines] ${symbol} ${tf}: using Binance data (${data.length} bars)`);
+      console.log(`[Klines] ${symbol} ${tf}: using Binance data`);
       // 缓存 Binance 数据
       setCached(symbol, tf, data);
       setLSCached(symbol, tf, data);
@@ -273,15 +267,12 @@ async function _fetchKlinesFromCryptoCompare(
 
   const days = targetDays ?? cfg.defaultDays;
   const targetBars = Math.ceil(days * cfg.barsPerDay);
-  const maxRequests = cfg.maxRequests;
   const allKlines: KlineData[] = [];
   let toTs: number | undefined = undefined;
   let requests = 0;
   let emptyResponseCount = 0;
-  let isFirstRequest = true;
-  let isDescending = true; // 假设降序排列（最新在前）
 
-  while (allKlines.length < targetBars && requests < maxRequests && emptyResponseCount < 3) {
+  while (allKlines.length < targetBars && requests < MAX_REQUESTS && emptyResponseCount < 3) {
     if (signal?.aborted) throw new Error("Aborted");
 
     const limit = Math.min(API_MAX_LIMIT, targetBars - allKlines.length);
@@ -296,15 +287,6 @@ async function _fetchKlinesFromCryptoCompare(
       break;
     }
 
-    // 首次请求：检测数据排序方向
-    if (isFirstRequest && raw.length >= 2) {
-      const time1 = raw[0].time as number;
-      const time2 = raw[raw.length - 1].time as number;
-      isDescending = time1 > time2; // true = 降序（最新在前）
-      console.log(`[CryptoCompare] ${symbol} ${tf}: data order detected: ${isDescending ? 'descending' : 'ascending'} (first=${time1}, last=${time2})`);
-      isFirstRequest = false;
-    }
-
     const batch: KlineData[] = raw.map((d: Record<string, any>) => ({
       time: d.time as number,
       open: d.open as number,
@@ -316,15 +298,12 @@ async function _fetchKlinesFromCryptoCompare(
 
     allKlines.push(...batch);
     
-    // 根据排序方向确定下一页的 toTs
-    // 降序（最新在前）：取最后一条（最早的），减 1 获取更早数据
-    // 升序（最早在前）：取第一条（最早的），减 1 获取更早数据
-    const pivotBar = isDescending ? raw[raw.length - 1] : raw[0];
-    const nextToTs = (pivotBar.time as number) - 1;
+    // CryptoCompare 返回数据按时间降序排列
+    const oldestBar = raw[raw.length - 1];
+    const nextToTs = oldestBar.time - 1;
     
-    // 安全检查：确保时间向前推进
     if (toTs !== undefined && nextToTs >= toTs) {
-      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available (nextToTs=${nextToTs} >= toTs=${toTs})`);
+      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available`);
       break;
     }
     
@@ -333,7 +312,6 @@ async function _fetchKlinesFromCryptoCompare(
     
     if (raw.length < limit) {
       console.log(`[CryptoCompare] ${symbol} ${tf}: partial response (${raw.length}/${limit})`);
-      break;
     }
   }
 
@@ -346,10 +324,8 @@ async function _fetchKlinesFromCryptoCompare(
   });
   unique.sort((a, b) => a.time - b.time);
 
-  console.log(`[CryptoCompare] ${symbol} ${tf}: fetched ${unique.length} bars (${requests} requests, target=${targetBars})`);
-
   if (unique.length < MIN_BARS_REQUIRED) {
-    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: only ${unique.length} bars returned (min=${MIN_BARS_REQUIRED})`);
+    console.warn(`[CryptoCompare] ⚠️ ${symbol} ${tf}: only ${unique.length} bars returned`);
   }
   
   setCached(symbol, tf, unique);
