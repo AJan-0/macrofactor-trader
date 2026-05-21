@@ -279,13 +279,13 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   const [chartInstance, setChartInstance] = useState<IChartApi | null>(null);
   const [containerInstance, setContainerInstance] = useState<HTMLDivElement | null>(null);
   
-  // 当 chart 初始化完成后更新 state
+  // 当 chart 初始化完成后更新 state，依赖 dataVersion 确保数据加载后也能绑定
   useEffect(() => {
     if (chartRef.current && containerRef.current) {
       setChartInstance(chartRef.current);
       setContainerInstance(containerRef.current);
     }
-  }, []);
+  }, [dataVersion]);
   
   useTouchGestures({
     chart: chartInstance,
