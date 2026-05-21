@@ -11,8 +11,8 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+// import { useQuery } from '@tanstack/react-query'
+// import axios from 'axios'
 import { KlineDataManager, type KlineData, type LoadProgress, type CacheMetrics } from '@/services/klineDataManager'
 
 interface ChartManagerProps {
@@ -55,12 +55,12 @@ export const ChartManagerComponent: React.FC<ChartManagerProps> = ({
   // 初始化数据管理器
   useEffect(() => {
     if (!managerRef.current) {
-      const apiClient = axios.create({
-        baseURL: 'http://localhost:8000',
-        timeout: 10000,
-      })
+      // const apiClient = axios.create({
+      //   baseURL: 'http://localhost:8000',
+      //   timeout: 10000,
+      // })
 
-      managerRef.current = new KlineDataManager(apiClient)
+      managerRef.current = new KlineDataManager()
       managerRef.current.init()
     }
 
@@ -311,11 +311,11 @@ export const ChartManagerComponent: React.FC<ChartManagerProps> = ({
       <div className="grid grid-cols-4 gap-2 bg-slate-800 rounded-lg p-3">
         <MetricCard
           label="L1 Hit Rate"
-          value={`${(metrics.l1Hits / (metrics.l1Hits + metrics.l1Misses) || 0) * 100).toFixed(1)}%`}
+          value={`${(((metrics.l1Hits / (metrics.l1Hits + metrics.l1Misses)) || 0) * 100).toFixed(1)}%`}
         />
         <MetricCard
           label="L2 Hit Rate"
-          value={`${(metrics.l2Hits / (metrics.l2Hits + metrics.l2Misses) || 0) * 100).toFixed(1)}%`}
+          value={`${(((metrics.l2Hits / (metrics.l2Hits + metrics.l2Misses)) || 0) * 100).toFixed(1)}%`}
         />
         <MetricCard
           label="Cache Hit Rate"

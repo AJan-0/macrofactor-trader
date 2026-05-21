@@ -229,8 +229,8 @@ class KlineValidator {
       }
 
       // 检查OHLC关系
-      if (!(kline.low <= kline.close <= kline.high &&
-            kline.low <= kline.open <= kline.high)) {
+      if (!(kline.low <= kline.close && kline.close <= kline.high &&
+            kline.low <= kline.open && kline.open <= kline.high)) {
         errors.push(`Invalid OHLC at ${idx}: L=${kline.low} O=${kline.open} H=${kline.high} C=${kline.close}`)
       }
 
@@ -295,7 +295,7 @@ export class KlineDataManager {
   private preloadingTasks = new Map<string, Promise<KlineData[]>>()
   private realTimeBuffer = new Map<string, Map<string, KlineData[]>>()
 
-  constructor(apiClient: any) {
+  constructor(apiClient?: any) {
     this.l1Cache = new L1MemoryCache()
     this.l2Cache = new L2IndexedDBCache()
     this.apiClient = apiClient
@@ -475,10 +475,22 @@ export class KlineDataManager {
       klines.splice(0, klines.length - 1000)
     }
 
-    // 更新缓存
+    // 更新缓存：合并实时数据到已有历史，而非替换
     const cacheKey = `${symbol}:${timeframe}`
-    this.l1Cache.set(cacheKey, klines)
-    await this.l2Cache.set(cacheKey, klines)
+    const existing = this.l1Cache.get(cacheKey) || []
+    const merged = this.mergeKlines(existing, klines)
+    this.l1Cache.set(cacheKey, merged)
+    await this.l2Cache.set(cacheKey, merged)
+
+    // 通知数据就绪
+    this.notifyDataReady(symbol, timeframe, merged)
+  }
+
+  private mergeKlines(existing: KlineData[], realtime: KlineData[]): KlineData[] {
+    const map = new Map<number, KlineData>()
+    for (const k of existing) map.set(k.timestamp, k)
+    for (const k of realtime) map.set(k.timestamp, k)
+    return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp)
   }
 
   /**

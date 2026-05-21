@@ -298,12 +298,13 @@ async function _fetchKlinesFromCryptoCompare(
 
     allKlines.push(...batch);
     
-    // CryptoCompare 返回数据按时间降序排列
-    const oldestBar = raw[raw.length - 1];
+    // 自动检测排序方向：比较首尾时间戳
+    const isDescending = raw.length > 1 && raw[0].time > raw[raw.length - 1].time;
+    const oldestBar = isDescending ? raw[raw.length - 1] : raw[0];
     const nextToTs = oldestBar.time - 1;
     
     if (toTs !== undefined && nextToTs >= toTs) {
-      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available`);
+      console.log(`[CryptoCompare] ${symbol} ${tf}: no older data available (sort=${isDescending ? 'desc' : 'asc'})`);
       break;
     }
     

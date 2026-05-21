@@ -78,6 +78,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
   const strategyOutputsRef = useRef(strategyOutputs);
   const eventsRef = useRef(events);
   const klinesRef = useRef(klines);
+  const prevTimeframeRef = useRef(timeframe);
 
   // Keep refs in sync
   useEffect(() => {
@@ -247,11 +248,10 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     volumeRef.current.setData(volumeData);
     chartRef.current.priceScale("right").applyOptions({ autoScale: true });
 
-    if (markers.length) {
-      // lightweight-charts v4.2 type defs omit setMarkers
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (candleRef.current as any).setMarkers?.(markers);
-    }
+    // 始终设置markers，空数组时清空旧标记
+    // lightweight-charts v4.2 type defs omit setMarkers
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (candleRef.current as any).setMarkers?.(markers || []);
 
     // Update timeframe settings
     const isIntraday = ["1m", "3m", "5m", "15m", "1H"].includes(timeframe);
@@ -260,10 +260,16 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
       barSpacing: timeframe === "1D" ? 12 : timeframe === "4H" ? 8 : 6,
     });
 
-    requestAnimationFrame(() => {
-      chartRef.current?.timeScale().fitContent();
+    // 只在首次加载或timeframe切换时fitContent，避免实时更新重置用户缩放
+    if (prevTimeframeRef.current !== timeframe) {
+      prevTimeframeRef.current = timeframe;
+      requestAnimationFrame(() => {
+        chartRef.current?.timeScale().fitContent();
+        isUpdatingRef.current = false;
+      });
+    } else {
       isUpdatingRef.current = false;
-    });
+    }
   }, [candleData, volumeData, markers, timeframe]);
 
   // 移动端触摸手势支持 - TradingView 风格
