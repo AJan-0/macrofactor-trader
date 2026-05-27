@@ -41,7 +41,7 @@ export function useRealtimeFactors(): UseRealtimeFactorsReturn {
   const pendingUpdates = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 批量更新因子（防抖）
-  const batchUpdate = useCallback((newFactors: FactorItem[]) => {
+  const _batchUpdate = useCallback((newFactors: FactorItem[]) => {
     if (pendingUpdates.current) {
       clearTimeout(pendingUpdates.current);
     }

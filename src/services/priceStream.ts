@@ -10,6 +10,7 @@ const WS_URL = "wss://streamer.cryptocompare.com/v2";
 const SYMBOL_MAP: Record<AssetSymbol, string> = {
   "BTC-USDT": "BTC",
   "ETH-USDT": "ETH",
+  "SOL-USDT": "SOL",
   "GC=F": "PAXG",
 };
 

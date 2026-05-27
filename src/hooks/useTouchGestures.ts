@@ -226,14 +226,14 @@ export function useTouchGestures({
             const coordinateToTime = timeScale.coordinateToTime(x);
             if (coordinateToTime !== null) {
               // 尝试获取价格（从第一个可见系列）
-              const series = chart.series()[0];
+              const series = (chart as any).series?.()[0];
               let price = 0;
               if (series) {
-                const data = series.data();
+                const data = series.data() as Array<{time: number; close?: number}>;
                 const timeNum = coordinateToTime as number;
-                const closest = data.find(d => (d.time as number) >= timeNum);
+                const closest = data.find((d: {time: number}) => d.time >= timeNum);
                 if (closest && 'close' in closest) {
-                  price = (closest as any).close;
+                  price = closest.close ?? 0;
                 }
               }
               onLongPress?.(coordinateToTime as number, price);
@@ -253,14 +253,14 @@ export function useTouchGestures({
           
           const coordinateToTime = timeScale.coordinateToTime(x);
           if (coordinateToTime !== null) {
-            const series = chart.series()[0];
+            const series = (chart as any).series?.()[0];
             let price = 0;
             if (series) {
-              const data = series.data();
+              const data = series.data() as Array<{time: number; close?: number}>;
               const timeNum = coordinateToTime as number;
-              const closest = data.find(d => (d.time as number) >= timeNum);
+              const closest = data.find((d: {time: number}) => d.time >= timeNum);
               if (closest && 'close' in closest) {
-                price = (closest as any).close;
+                price = closest.close ?? 0;
               }
             }
             onLongPress?.(coordinateToTime as number, price);
@@ -295,7 +295,7 @@ export function useTouchGestures({
         const scale = distance / state.startDistance;
         
         // 使用对数缩放曲线，让缩放更自然
-        const logScale = Math.log(scale + 1) / Math.log(2);
+        const _logScale = Math.log(scale + 1) / Math.log(2);
         const newBarSpacing = Math.max(MIN_BAR_SPACING, Math.min(MAX_BAR_SPACING, 
           state.startBarSpacing * Math.pow(scale, PINCH_SENSITIVITY)
         ));

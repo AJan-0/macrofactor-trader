@@ -49,14 +49,11 @@ export default function Dashboard() {
   
   // 实时因子系统
   const {
-    factors: realtimeFactors,
-    combination: realtimeCombo,
     isRealtime,
     lastUpdate: realtimeLastUpdate,
     updates: realtimeUpdates,
     toggleFactor: realtimeToggleFactor,
     updateFactorWeight: realtimeUpdateWeight,
-    updateFactorDirection: realtimeUpdateDirection,
   } = useRealtimeFactors();
   
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");

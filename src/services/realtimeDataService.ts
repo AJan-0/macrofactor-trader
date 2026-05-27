@@ -3,7 +3,7 @@
  * 统一接入多源实时数据，转换为内部事件
  */
 
-import type { FactorItem } from "./factorEngine";
+// import type { FactorItem } from "./factorEngine";
 
 // ── 事件类型 ──
 export interface ProbabilityUpdateEvent {
