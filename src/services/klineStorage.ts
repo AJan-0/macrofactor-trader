@@ -81,6 +81,12 @@ export interface StorageStats {
   storageSizeMB: number;
 }
 
+interface LegacyKlineEntry {
+  key?: string;
+  klines?: KlineData[];
+  updatedAt?: number;
+}
+
 // ── 常量 ──
 
 const DB_NAME = "macrofactor-trader-v2";
@@ -201,11 +207,11 @@ async function migrateFromV1(db: IDBDatabase): Promise<void> {
     });
     
     // 读取旧数据并转换
-    const oldData = await new Promise<any[]>((resolve) => {
+    const oldData = await new Promise<LegacyKlineEntry[]>((resolve) => {
       const tx = oldDB.transaction("klines", "readonly");
       const store = tx.objectStore("klines");
       const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
+      req.onsuccess = () => resolve((req.result || []) as LegacyKlineEntry[]);
       req.onerror = () => resolve([]);
     });
     

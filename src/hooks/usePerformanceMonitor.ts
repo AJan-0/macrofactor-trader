@@ -15,6 +15,19 @@ interface PerformanceMetrics {
   renderTime: number;
 }
 
+interface LargestContentfulPaintEntry extends PerformanceEntry {
+  startTime: number;
+}
+
+interface LayoutShiftEntry extends PerformanceEntry {
+  hadRecentInput: boolean;
+  value: number;
+}
+
+interface FirstInputEntry extends PerformanceEntry {
+  processingStart: number;
+}
+
 export function usePerformanceMonitor(componentName: string) {
   const renderCount = useRef(0);
   const renderStartTime = useRef(0);
@@ -61,10 +74,10 @@ export function usePerformanceMonitor(componentName: string) {
     // LCP
     const lcpObserver = new PerformanceObserver((list) => {
       const entries = list.getEntries();
-      const lcp = entries[entries.length - 1];
+      const lcp = entries[entries.length - 1] as LargestContentfulPaintEntry | undefined;
       if (lcp) {
-        metricsRef.current.lcp = (lcp as any).startTime;
-        console.log(`[Performance] LCP: ${(lcp as any).startTime.toFixed(0)}ms`);
+        metricsRef.current.lcp = lcp.startTime;
+        console.log(`[Performance] LCP: ${lcp.startTime.toFixed(0)}ms`);
       }
     });
     lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
@@ -73,8 +86,9 @@ export function usePerformanceMonitor(componentName: string) {
     const clsObserver = new PerformanceObserver((list) => {
       let clsValue = 0;
       for (const entry of list.getEntries()) {
-        if (!(entry as any).hadRecentInput) {
-          clsValue += (entry as any).value;
+        const layoutShift = entry as LayoutShiftEntry;
+        if (!layoutShift.hadRecentInput) {
+          clsValue += layoutShift.value;
         }
       }
       metricsRef.current.cls = clsValue;
@@ -84,9 +98,9 @@ export function usePerformanceMonitor(componentName: string) {
     // FID
     const fidObserver = new PerformanceObserver((list) => {
       const entries = list.getEntries();
-      const fid = entries[entries.length - 1];
+      const fid = entries[entries.length - 1] as FirstInputEntry | undefined;
       if (fid) {
-        metricsRef.current.fid = (fid as any).processingStart - fid.startTime;
+        metricsRef.current.fid = fid.processingStart - fid.startTime;
         console.log(`[Performance] FID: ${metricsRef.current.fid.toFixed(0)}ms`);
       }
     });
@@ -106,24 +120,24 @@ export function usePerformanceMonitor(componentName: string) {
 }
 
 // 防抖函数（用于高频事件）
-export function debounce<T extends (...args: any[]) => void>(
-  fn: T,
+export function debounce<TArgs extends unknown[]>(
+  fn: (...args: TArgs) => void,
   delay: number
-): (...args: Parameters<T>) => void {
+): (...args: TArgs) => void {
   let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
+  return (...args: TArgs) => {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
   };
 }
 
 // 节流函数
-export function throttle<T extends (...args: any[]) => void>(
-  fn: T,
+export function throttle<TArgs extends unknown[]>(
+  fn: (...args: TArgs) => void,
   limit: number
-): (...args: Parameters<T>) => void {
+): (...args: TArgs) => void {
   let inThrottle = false;
-  return (...args: Parameters<T>) => {
+  return (...args: TArgs) => {
     if (!inThrottle) {
       fn(...args);
       inThrottle = true;
@@ -170,5 +184,4 @@ export function useVirtualScroll(
 
   return { virtualItems, onScroll };
 }
-
 

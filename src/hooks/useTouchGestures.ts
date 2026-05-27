@@ -60,6 +60,21 @@ interface GestureState {
   initialTouchY: number;
 }
 
+interface SeriesSnapshot {
+  data?: () => Array<{ time: number; close?: number }>;
+}
+
+type ChartWithSeriesSnapshot = IChartApi & {
+  series?: () => SeriesSnapshot[];
+};
+
+function getClosestSeriesPrice(chart: IChartApi, time: number): number {
+  const series = (chart as ChartWithSeriesSnapshot).series?.()[0];
+  const data = series?.data?.() ?? [];
+  const closest = data.find((d) => d.time >= time);
+  return closest?.close ?? 0;
+}
+
 export function useTouchGestures({ 
   chart, 
   container, 
@@ -225,17 +240,7 @@ export function useTouchGestures({
             // 获取时间和价格
             const coordinateToTime = timeScale.coordinateToTime(x);
             if (coordinateToTime !== null) {
-              // 尝试获取价格（从第一个可见系列）
-              const series = (chart as any).series?.()[0];
-              let price = 0;
-              if (series) {
-                const data = series.data() as Array<{time: number; close?: number}>;
-                const timeNum = coordinateToTime as number;
-                const closest = data.find((d: {time: number}) => d.time >= timeNum);
-                if (closest && 'close' in closest) {
-                  price = closest.close ?? 0;
-                }
-              }
+              const price = getClosestSeriesPrice(chart, coordinateToTime as number);
               onLongPress?.(coordinateToTime as number, price);
             }
           }
@@ -253,16 +258,7 @@ export function useTouchGestures({
           
           const coordinateToTime = timeScale.coordinateToTime(x);
           if (coordinateToTime !== null) {
-            const series = (chart as any).series?.()[0];
-            let price = 0;
-            if (series) {
-              const data = series.data() as Array<{time: number; close?: number}>;
-              const timeNum = coordinateToTime as number;
-              const closest = data.find((d: {time: number}) => d.time >= timeNum);
-              if (closest && 'close' in closest) {
-                price = closest.close ?? 0;
-              }
-            }
+            const price = getClosestSeriesPrice(chart, coordinateToTime as number);
             onLongPress?.(coordinateToTime as number, price);
           }
         }
@@ -294,8 +290,6 @@ export function useTouchGestures({
         const center = getCenter(t1, t2);
         const scale = distance / state.startDistance;
         
-        // 使用对数缩放曲线，让缩放更自然
-        const _logScale = Math.log(scale + 1) / Math.log(2);
         const newBarSpacing = Math.max(MIN_BAR_SPACING, Math.min(MAX_BAR_SPACING, 
           state.startBarSpacing * Math.pow(scale, PINCH_SENSITIVITY)
         ));

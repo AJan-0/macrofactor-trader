@@ -23,7 +23,9 @@ import json
 import logging
 import os
 import time
+import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Request, Response, WebSocket, WebSocketDisconnect, status
@@ -31,6 +33,7 @@ from pythonjsonlogger import jsonlogger
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 try:
@@ -53,6 +56,10 @@ from models import (
     MacroEventsResponse,
     EventCategory,
     ImpactLevel,
+    AlertConfig,
+    AlertCreatePayload,
+    AlertUpdatePayload,
+    AlertsResponse,
 )
 from services.okx_client import (
     get_crypto_klines_cached,
@@ -64,6 +71,7 @@ from services.okx_client import (
 from services.cache_backends import create_cache_backend, ICacheBackend
 from services.cache_config import cache_settings
 from database import init_db, close_db, get_db
+from models_db import AlertModel
 from services.sync_service import sync_all, query_events_from_db
 from services.okx_client import close_okx_client
 from config import get_settings
@@ -492,6 +500,36 @@ async def ws_klines(websocket: WebSocket) -> None:
         await _broadcaster.disconnect(websocket)
 
 
+@app.websocket("/ws/alerts")
+async def ws_alerts(websocket: WebSocket) -> None:
+    """WebSocket 端点: 预警事件流。
+
+    当前实现提供稳定连接和 ping/pong，用于对齐前端 AlertManager 契约。
+    后续实时触发引擎可在这里广播 {"type": "alert", ...} 事件。
+    """
+    await websocket.accept()
+    await websocket.send_text(json.dumps({
+        "type": "connected",
+        "message": "Alert stream active",
+        "active_alerts": 0,
+    }))
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Invalid JSON",
+                }))
+                continue
+            if msg.get("type") == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        logger.info("Alert WS client disconnected")
+
+
 # ──────────────────────────────
 # K 线数据路由（带缓存加速）
 # ──────────────────────────────
@@ -612,6 +650,183 @@ async def fetch_macro_events(
         source="SQLite DB",
         is_mock=False,
     )
+
+
+# ──────────────────────────────
+# 预警规则路由（前端 AlertManager 契约）
+# ──────────────────────────────
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _alert_to_schema(row: AlertModel) -> AlertConfig:
+    return AlertConfig(
+        id=row.alert_id,
+        symbol=row.symbol,
+        alert_type=row.alert_type,  # type: ignore[arg-type]
+        enabled=bool(row.enabled),
+        params=row.params or {},
+        cooldown_minutes=row.cooldown_minutes,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        last_triggered=row.last_triggered,
+        trigger_count=row.trigger_count,
+    )
+
+
+async def _get_alert_or_404(session: AsyncSession, alert_id: str) -> AlertModel:
+    result = await session.execute(
+        select(AlertModel).where(AlertModel.alert_id == alert_id)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return row
+
+
+@app.get(
+    "/api/alerts",
+    response_model=AlertsResponse,
+    tags=["Alerts"],
+    summary="获取预警规则列表",
+)
+@limiter.limit("60/minute")
+async def list_alerts(
+    request: Request,
+    symbol: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> AlertsResponse:
+    stmt = select(AlertModel).order_by(AlertModel.id.desc())
+    if symbol:
+        stmt = stmt.where(AlertModel.symbol == symbol)
+    result = await db.execute(stmt)
+    alerts = [_alert_to_schema(row) for row in result.scalars().all()]
+    return AlertsResponse(count=len(alerts), alerts=alerts)
+
+
+@app.post(
+    "/api/alerts",
+    response_model=AlertConfig,
+    tags=["Alerts"],
+    summary="创建预警规则",
+)
+@limiter.limit("30/minute")
+async def create_alert(
+    request: Request,
+    payload: AlertCreatePayload,
+    db: AsyncSession = Depends(get_db),
+) -> AlertConfig:
+    now = _utc_iso()
+    row = AlertModel(
+        alert_id=f"alert-{uuid.uuid4().hex[:12]}",
+        symbol=payload.symbol,
+        alert_type=payload.alert_type,
+        enabled=True,
+        params=payload.params,
+        cooldown_minutes=payload.cooldown_minutes,
+        created_at=now,
+        updated_at=now,
+        trigger_count=0,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return _alert_to_schema(row)
+
+
+@app.get(
+    "/api/alerts/{alert_id}",
+    response_model=AlertConfig,
+    tags=["Alerts"],
+    summary="获取单条预警规则",
+)
+@limiter.limit("60/minute")
+async def get_alert(
+    request: Request,
+    alert_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> AlertConfig:
+    return _alert_to_schema(await _get_alert_or_404(db, alert_id))
+
+
+@app.put(
+    "/api/alerts/{alert_id}",
+    response_model=AlertConfig,
+    tags=["Alerts"],
+    summary="更新预警规则",
+)
+@limiter.limit("30/minute")
+async def update_alert(
+    request: Request,
+    alert_id: str,
+    payload: AlertUpdatePayload,
+    db: AsyncSession = Depends(get_db),
+) -> AlertConfig:
+    row = await _get_alert_or_404(db, alert_id)
+    if payload.enabled is not None:
+        row.enabled = payload.enabled
+    if payload.params is not None:
+        row.params = payload.params
+    if payload.cooldown_minutes is not None:
+        row.cooldown_minutes = payload.cooldown_minutes
+    row.updated_at = _utc_iso()
+    await db.commit()
+    await db.refresh(row)
+    return _alert_to_schema(row)
+
+
+@app.delete(
+    "/api/alerts/{alert_id}",
+    tags=["Alerts"],
+    summary="删除预警规则",
+)
+@limiter.limit("30/minute")
+async def delete_alert(
+    request: Request,
+    alert_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    row = await _get_alert_or_404(db, alert_id)
+    await db.delete(row)
+    await db.commit()
+    return {"deleted": True}
+
+
+@app.post(
+    "/api/alerts/{alert_id}/test",
+    tags=["Alerts"],
+    summary="测试预警规则是否会触发",
+)
+@limiter.limit("60/minute")
+async def test_alert(
+    request: Request,
+    alert_id: str,
+    body: dict[str, Any] | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    row = await _get_alert_or_404(db, alert_id)
+    candle = (body or {}).get("candle") or {}
+    price = candle.get("price", candle.get("close"))
+    would_trigger = False
+    if row.alert_type == "price_cross" and price is not None:
+        level = (row.params or {}).get("level")
+        if level is not None:
+            try:
+                would_trigger = float(price) >= float(level)
+            except (TypeError, ValueError):
+                would_trigger = False
+
+    return {
+        "alert_id": row.alert_id,
+        "alert_type": row.alert_type,
+        "would_trigger": would_trigger,
+        "details": {
+            "symbol": row.symbol,
+            "params": row.params or {},
+            "candle": candle,
+        },
+    }
 
 
 # ──────────────────────────────

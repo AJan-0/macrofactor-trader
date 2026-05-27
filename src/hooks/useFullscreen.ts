@@ -10,6 +10,18 @@ interface UseFullscreenOptions {
   autoOnLandscape?: boolean;
 }
 
+interface VendorFullscreenElement extends HTMLElement {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+  msRequestFullscreen?: () => Promise<void> | void;
+}
+
+interface VendorFullscreenDocument extends Document {
+  webkitExitFullscreen?: () => Promise<void> | void;
+  msExitFullscreen?: () => Promise<void> | void;
+  webkitFullscreenElement?: Element | null;
+  msFullscreenElement?: Element | null;
+}
+
 export function useFullscreen({ enabled = true, autoOnLandscape = true }: UseFullscreenOptions = {}) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const elementRef = useRef<HTMLElement | null>(null);
@@ -21,10 +33,13 @@ export function useFullscreen({ enabled = true, autoOnLandscape = true }: UseFul
     try {
       if (el.requestFullscreen) {
         await el.requestFullscreen();
-      } else if ((el as any).webkitRequestFullscreen) {
-        await (el as any).webkitRequestFullscreen();
-      } else if ((el as any).msRequestFullscreen) {
-        await (el as any).msRequestFullscreen();
+      } else {
+        const vendorEl = el as VendorFullscreenElement;
+        if (vendorEl.webkitRequestFullscreen) {
+          await vendorEl.webkitRequestFullscreen();
+        } else if (vendorEl.msRequestFullscreen) {
+          await vendorEl.msRequestFullscreen();
+        }
       }
       elementRef.current = el;
     } catch (err) {
@@ -36,10 +51,13 @@ export function useFullscreen({ enabled = true, autoOnLandscape = true }: UseFul
     try {
       if (document.exitFullscreen) {
         await document.exitFullscreen();
-      } else if ((document as any).webkitExitFullscreen) {
-        await (document as any).webkitExitFullscreen();
-      } else if ((document as any).msExitFullscreen) {
-        await (document as any).msExitFullscreen();
+      } else {
+        const vendorDocument = document as VendorFullscreenDocument;
+        if (vendorDocument.webkitExitFullscreen) {
+          await vendorDocument.webkitExitFullscreen();
+        } else if (vendorDocument.msExitFullscreen) {
+          await vendorDocument.msExitFullscreen();
+        }
       }
     } catch (err) {
       console.warn("[useFullscreen] Failed to exit fullscreen:", err);
@@ -59,10 +77,11 @@ export function useFullscreen({ enabled = true, autoOnLandscape = true }: UseFul
     if (!enabled) return;
 
     const handleChange = () => {
+      const vendorDocument = document as VendorFullscreenDocument;
       setIsFullscreen(
         !!document.fullscreenElement ||
-        !!(document as any).webkitFullscreenElement ||
-        !!(document as any).msFullscreenElement
+        !!vendorDocument.webkitFullscreenElement ||
+        !!vendorDocument.msFullscreenElement
       );
     };
 

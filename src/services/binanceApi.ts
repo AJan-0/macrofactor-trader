@@ -31,11 +31,29 @@ const BINANCE_TIMEFRAME_MAP: Record<Timeframe, string> = {
 const BINANCE_MAX_LIMIT = 1000;
 const BINANCE_MAX_REQUESTS = 100; // 足够获取 3 年数据
 
+type BinanceKline = [
+  number,
+  string,
+  string,
+  string,
+  string,
+  string,
+  ...unknown[]
+];
+
+interface BinanceTicker24h {
+  lastPrice: string;
+  volume: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+}
+
 // 请求权重管理（Binance 使用 weight 限制而非请求数）
 let _binanceWeightUsed = 0;
 let _binanceWeightResetTime = Date.now() + 60000;
 
-async function binanceRateLimitedFetch(url: string, signal?: AbortSignal): Promise<any> {
+async function binanceRateLimitedFetch(url: string, signal?: AbortSignal): Promise<unknown> {
   const now = Date.now();
   
   // 检查是否需要重置权重计数
@@ -68,7 +86,7 @@ async function binanceRateLimitedFetch(url: string, signal?: AbortSignal): Promi
     }
     
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
+      const errData = await res.json().catch(() => ({})) as { msg?: string };
       const errMsg = errData.msg || `HTTP ${res.status}`;
       throw new Error(errMsg);
     }
@@ -128,7 +146,7 @@ export async function fetchKlinesFromBinance(
     let url = `${BINANCE_BASE}/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`;
     if (endTime) url += `&endTime=${endTime}`;
     
-    const raw: any[][] = await binanceRateLimitedFetch(url, signal);
+    const raw = await binanceRateLimitedFetch(url, signal) as BinanceKline[];
     
     if (!raw.length) break;
     
@@ -194,7 +212,7 @@ export async function fetchRealtimePriceFromBinance(
   if (!binanceSymbol) throw new Error(`Unsupported symbol ${symbol}`);
   
   const url = `${BINANCE_BASE}/ticker/24hr?symbol=${binanceSymbol}`;
-  const data = await binanceRateLimitedFetch(url, signal);
+  const data = await binanceRateLimitedFetch(url, signal) as BinanceTicker24h;
   
   return {
     price: parseFloat(data.lastPrice),

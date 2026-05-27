@@ -8,6 +8,12 @@ interface CleanupFn {
   fn: () => void;
 }
 
+interface PerformanceMemory {
+  usedJSHeapSize: number;
+  totalJSHeapSize: number;
+  jsHeapSizeLimit: number;
+}
+
 class MemoryManager {
   private cleanups = new Map<string, CleanupFn[]>();
   private intervals = new Map<string, ReturnType<typeof setInterval>[]>();
@@ -126,7 +132,7 @@ class MemoryManager {
    * 获取内存使用统计（如果可用）
    */
   getStats(): { used: number; total: number; limit: number } | null {
-    const memory = (performance as any).memory;
+    const memory = (performance as Performance & { memory?: PerformanceMemory }).memory;
     if (!memory) return null;
     return {
       used: Math.round(memory.usedJSHeapSize / 1048576),

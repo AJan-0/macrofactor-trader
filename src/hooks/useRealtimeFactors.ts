@@ -3,7 +3,7 @@
  * 自动订阅实时数据，管理因子状态更新
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { FactorItem, FactorCombination } from "@/services/factorEngine";
 import { analyzeFactors } from "@/services/factorEngine";
 import { getRealtimeService, type RealtimeEvent } from "@/services/realtimeDataService";
@@ -30,31 +30,12 @@ export interface UseRealtimeFactorsReturn {
 
 export function useRealtimeFactors(): UseRealtimeFactorsReturn {
   const [factors, setFactors] = useState<FactorItem[]>(loadUserFactors);
-  const [combination, setCombination] = useState<FactorCombination>(() =>
-    analyzeFactors(loadUserFactors())
-  );
-  const [isRealtime, setIsRealtime] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(Date.now());
+  const combination = useMemo<FactorCombination>(() => analyzeFactors(factors), [factors]);
+  const [isRealtime] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(() => Date.now());
   const [updates, setUpdates] = useState<FactorUpdate[]>([]);
 
   const factorHistory = useRef<Map<string, number[]>>(new Map());
-  const pendingUpdates = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 批量更新因子（防抖）
-  const _batchUpdate = useCallback((newFactors: FactorItem[]) => {
-    if (pendingUpdates.current) {
-      clearTimeout(pendingUpdates.current);
-    }
-
-    pendingUpdates.current = setTimeout(() => {
-      setFactors(newFactors);
-      setCombination(analyzeFactors(newFactors));
-      setLastUpdate(Date.now());
-      saveUserFactors(newFactors);
-      pendingUpdates.current = null;
-    }, 500);
-  }, []);
-
   // 处理实时事件
   const handleEvent = useCallback((event: RealtimeEvent) => {
     setFactors(currentFactors => {
@@ -103,26 +84,18 @@ export function useRealtimeFactors(): UseRealtimeFactorsReturn {
   useEffect(() => {
     const service = getRealtimeService();
     service.start();
-    setIsRealtime(true);
 
     const unsubscribe = service.subscribe(handleEvent);
 
     return () => {
       unsubscribe();
       service.stop();
-      setIsRealtime(false);
     };
   }, [handleEvent]);
-
-  // 因子变化时重新计算组合
-  useEffect(() => {
-    setCombination(analyzeFactors(factors));
-  }, [factors]);
 
   const refresh = useCallback(() => {
     const fresh = loadUserFactors();
     setFactors(fresh);
-    setCombination(analyzeFactors(fresh));
     setLastUpdate(Date.now());
   }, []);
 

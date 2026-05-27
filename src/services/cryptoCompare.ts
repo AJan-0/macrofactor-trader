@@ -379,7 +379,9 @@ export async function fetchRealtimePrice(symbol: AssetSymbol, signal?: AbortSign
         lastUpdate: Date.now(),
       };
     } catch (binanceErr) {
-      throw new Error(`All price sources failed`);
+      throw new Error(
+        `All price sources failed. CryptoCompare: ${(ccErr as Error).message}, Binance: ${(binanceErr as Error).message}`
+      );
     }
   }
 }

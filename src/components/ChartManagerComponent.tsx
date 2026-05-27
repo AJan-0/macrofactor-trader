@@ -161,7 +161,10 @@ export const ChartManagerComponent: React.FC<ChartManagerProps> = ({
 
   // 初始加载
   useEffect(() => {
-    loadKlines()
+    const timer = window.setTimeout(() => {
+      void loadKlines()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [currentSymbol, currentTimeframe, loadKlines])
 
   // 连接WebSocket实时更新

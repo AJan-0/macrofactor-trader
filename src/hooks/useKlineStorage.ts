@@ -58,58 +58,6 @@ export function useKlineStorage(
     isInitialized: boolean;
   }>({ earliestLoaded: Infinity, latestLoaded: 0, isInitialized: false });
   
-  // 初始化加载
-  useEffect(() => {
-    let cancelled = false;
-    
-    async function init() {
-      setIsLoading(true);
-      setError(null);
-      metaRef.current = { earliestLoaded: Infinity, latestLoaded: 0, isInitialized: false };
-      
-      try {
-        // 确保数据库已打开
-        await openKlineDB();
-        
-        // 获取存储统计
-        const storageStats = await getStorageStats(symbol, timeframe);
-        if (storageStats) {
-          setStats({
-            totalBars: storageStats.totalBars,
-            storageSizeMB: storageStats.storageSizeMB,
-            dateRange: storageStats.dateRange,
-          });
-        }
-        
-        // 尝试从本地存储加载最新数据
-        const latest = await getLatestKlines(symbol, timeframe, 1000);
-        
-        if (latest.length > 0 && !cancelled) {
-          setKlines(latest);
-          metaRef.current.latestLoaded = latest[latest.length - 1].time;
-          metaRef.current.earliestLoaded = latest[0].time;
-          metaRef.current.isInitialized = true;
-          setIsLoading(false);
-          
-          // 后台检查是否需要更新
-          checkAndUpdate(symbol, timeframe, latest[latest.length - 1].time);
-        } else {
-          // 本地无数据，从API加载
-          await loadFromAPI(symbol, timeframe, true);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to initialize storage');
-          setIsLoading(false);
-        }
-      }
-    }
-    
-    init();
-    
-    return () => { cancelled = true; };
-  }, [symbol, timeframe]);
-  
   // 从API加载数据（支持增量）
   const loadFromAPI = useCallback(async (
     sym: AssetSymbol,
@@ -220,6 +168,58 @@ export function useKlineStorage(
       }
     }
   }, [loadFromAPI]);
+
+  // 初始化加载
+  useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
+      setIsLoading(true);
+      setError(null);
+      metaRef.current = { earliestLoaded: Infinity, latestLoaded: 0, isInitialized: false };
+
+      try {
+        // 确保数据库已打开
+        await openKlineDB();
+
+        // 获取存储统计
+        const storageStats = await getStorageStats(symbol, timeframe);
+        if (storageStats) {
+          setStats({
+            totalBars: storageStats.totalBars,
+            storageSizeMB: storageStats.storageSizeMB,
+            dateRange: storageStats.dateRange,
+          });
+        }
+
+        // 尝试从本地存储加载最新数据
+        const latest = await getLatestKlines(symbol, timeframe, 1000);
+
+        if (latest.length > 0 && !cancelled) {
+          setKlines(latest);
+          metaRef.current.latestLoaded = latest[latest.length - 1].time;
+          metaRef.current.earliestLoaded = latest[0].time;
+          metaRef.current.isInitialized = true;
+          setIsLoading(false);
+
+          // 后台检查是否需要更新
+          checkAndUpdate(symbol, timeframe, latest[latest.length - 1].time);
+        } else {
+          // 本地无数据，从API加载
+          await loadFromAPI(symbol, timeframe, true);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize storage');
+          setIsLoading(false);
+        }
+      }
+    }
+
+    init();
+
+    return () => { cancelled = true; };
+  }, [symbol, timeframe, checkAndUpdate, loadFromAPI]);
   
   // 加载更多历史数据
   const loadMore = useCallback(async () => {

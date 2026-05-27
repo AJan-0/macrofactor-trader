@@ -68,7 +68,10 @@ export default function KlineStorageManager() {
   }, []);
 
   useEffect(() => {
-    loadStats();
+    const timer = window.setTimeout(() => {
+      void loadStats();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadStats]);
 
   // 清理过期数据

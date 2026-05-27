@@ -6,7 +6,7 @@ models.py
 """
 
 from pydantic import BaseModel, Field
-from typing import Literal, TypeVar, Generic
+from typing import Any, Literal, TypeVar, Generic
 from enum import Enum
 
 
@@ -166,3 +166,42 @@ class MacroEventsResponse(BaseModel):
     data: list[MacroEvent] = Field(default_factory=list)
     source: str = Field(default="FRED", description="Data source name")
     is_mock: bool = Field(default=False, description="Whether data is mock/fallback")
+
+
+AlertType = Literal["price_cross", "reversal", "multi_tf"]
+AlertParams = dict[str, Any]
+
+
+class AlertConfig(BaseModel):
+    """用户预警规则配置。"""
+    id: str
+    symbol: str
+    alert_type: AlertType
+    enabled: bool = True
+    params: AlertParams = Field(default_factory=dict)
+    cooldown_minutes: int = Field(default=5, ge=1, le=1440)
+    created_at: str
+    updated_at: str
+    last_triggered: str | None = None
+    trigger_count: int = 0
+
+
+class AlertCreatePayload(BaseModel):
+    """创建预警规则的请求体。"""
+    symbol: str = Field(..., min_length=1, max_length=32)
+    alert_type: AlertType
+    params: AlertParams = Field(default_factory=dict)
+    cooldown_minutes: int = Field(default=5, ge=1, le=1440)
+
+
+class AlertUpdatePayload(BaseModel):
+    """更新预警规则的请求体。"""
+    enabled: bool | None = None
+    params: AlertParams | None = None
+    cooldown_minutes: int | None = Field(default=None, ge=1, le=1440)
+
+
+class AlertsResponse(BaseModel):
+    """预警规则列表响应。"""
+    count: int
+    alerts: list[AlertConfig] = Field(default_factory=list)

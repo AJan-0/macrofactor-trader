@@ -1,5 +1,6 @@
 // 全局错误边界 - P0 核心稳定性
 // 捕获渲染错误，防止白屏，提供降级 UI
+/* eslint-disable react-refresh/only-export-components */
 
 import React, { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";

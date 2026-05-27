@@ -103,12 +103,6 @@ export default function AlertManager() {
   const [alerts, setAlerts] = useState<AlertConfig[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 注册全局打开方法
-  useEffect(() => {
-    registerAlertManagerOpener(() => setDialogOpen(true));
-    return () => { registerAlertManagerOpener(null); };
-  }, []);
-
   // ── form state ──
   const [formType, setFormType] = useState<AlertCreatePayload["alert_type"]>("price_cross");
   const [formSymbol, setFormSymbol] = useState<AssetSymbol>("BTC-USDT");
@@ -126,7 +120,17 @@ export default function AlertManager() {
       console.warn("[AlertManager] loadAlerts:", errorMessage(err));
     }
   }, []);
-  useEffect(() => { if (dialogOpen) loadAlerts(); }, [dialogOpen, loadAlerts]);
+
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setDialogOpen(open);
+    if (open) void loadAlerts();
+  }, [loadAlerts]);
+
+  // 注册全局打开方法
+  useEffect(() => {
+    registerAlertManagerOpener(() => handleDialogOpenChange(true));
+    return () => { registerAlertManagerOpener(null); };
+  }, [handleDialogOpenChange]);
 
   // ── 启用/禁用 ──
   const handleToggle = useCallback(async (id: string, enabled: boolean) => {
@@ -458,7 +462,7 @@ export default function AlertManager() {
   );
 
   return (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+    <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         className="bg-[#111827] border-[#2d3a52] text-[#e2e8f0] max-w-lg max-h-[80vh] p-0 overflow-hidden"
         style={{ fontSize: 12 }}>

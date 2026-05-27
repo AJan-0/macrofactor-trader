@@ -56,7 +56,10 @@ export function usePushNotification() {
   });
 
   const configRef = useRef(state.config);
-  configRef.current = state.config;
+
+  useEffect(() => {
+    configRef.current = state.config;
+  }, [state.config]);
 
   // 初始化：检查支持状态和权限
   useEffect(() => {

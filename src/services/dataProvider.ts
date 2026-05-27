@@ -26,6 +26,22 @@ interface SourceError {
   count: number;
 }
 
+type CoinGeckoPoint = [number, number];
+interface CoinGeckoMarketChart {
+  prices?: CoinGeckoPoint[];
+  total_volumes?: CoinGeckoPoint[];
+}
+
+type BinanceKline = [
+  number,
+  string,
+  string,
+  string,
+  string,
+  string,
+  ...unknown[]
+];
+
 const _errorLog = new Map<DataSource, SourceError>();
 const ERROR_THRESHOLD = 3; // 连续错误3次后降级
 const ERROR_WINDOW = 5 * 60 * 1000; // 5分钟窗口
@@ -91,11 +107,11 @@ async function fetchFromCoinGecko(
 
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
-  const json = await res.json();
+  const json = await res.json() as CoinGeckoMarketChart;
 
   // CoinGecko 返回 prices: [timestamp, price][]
-  const prices: [number, number][] = json.prices || [];
-  const volumes: [number, number][] = json.total_volumes || [];
+  const prices = json.prices || [];
+  const volumes = json.total_volumes || [];
 
   // 转换为 KlineData（CoinGecko 不提供 OHLC，用价格近似）
   return prices.map((p, i) => {
@@ -159,7 +175,7 @@ async function fetchFromBinance(
 
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-    const data: any[] = await res.json();
+    const data = await res.json() as BinanceKline[];
 
     if (!data.length) break;
 
@@ -223,10 +239,11 @@ export async function fetchKlinesMulti(
 
       let data: KlineData[];
       switch (source.name) {
-        case "cryptocompare":
+        case "cryptocompare": {
           const { fetchKlines } = await import("./cryptoCompare");
           data = await fetchKlines(symbol, tf, undefined, controller.signal);
           break;
+        }
         case "coingecko":
           data = await fetchFromCoinGecko(symbol, tf, controller.signal);
           break;
@@ -242,8 +259,8 @@ export async function fetchKlinesMulti(
 
       console.log(`[DataProvider] ✓ ${symbol} ${tf} from ${source.name}: ${data.length} bars`);
       return { data, source: source.name };
-    } catch (err: any) {
-      const msg = err?.message || String(err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${source.name}: ${msg}`);
       recordError(source.name, msg);
       console.warn(`[DataProvider] ✗ ${source.name} failed: ${msg}`);
@@ -276,10 +293,11 @@ export async function fetchRealtimePriceMulti(
 
       let data: RealtimePrice;
       switch (source.name) {
-        case "cryptocompare":
+        case "cryptocompare": {
           const { fetchRealtimePrice } = await import("./cryptoCompare");
           data = await fetchRealtimePrice(symbol);
           break;
+        }
         default:
           // 其他源暂不实现实时价格，跳过
           throw new Error("Realtime price not implemented for this source");
@@ -288,8 +306,8 @@ export async function fetchRealtimePriceMulti(
       clearTimeout(timer);
       recordSuccess(source.name);
       return { data, source: source.name };
-    } catch (err: any) {
-      const msg = err?.message || String(err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${source.name}: ${msg}`);
       recordError(source.name, msg);
     }

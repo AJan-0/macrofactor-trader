@@ -26,6 +26,16 @@ interface UseStrategyOverlayOptions {
   }) => void;
 }
 
+function loadStoredStrategies(): ActiveStrategy[] {
+  if (typeof localStorage === "undefined") return [];
+
+  const raw = localStorage.getItem("chartStrategies");
+  if (!raw) return [];
+
+  const saved = safeParseActiveStrategies(raw);
+  return saved.filter((s) => strategyRegistry.get(s.id));
+}
+
 export function useStrategyOverlay({
   chart,
   candleSeries,
@@ -42,7 +52,7 @@ export function useStrategyOverlay({
   const chartRef = useRef(chart);
   const candleSeriesRef = useRef(candleSeries);
 
-  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
+  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>(loadStoredStrategies);
   const [strategyOutputs, setStrategyOutputs] = useState<Map<string, StrategyOutput>>(new Map());
 
   const allStrategies = strategyRegistry.getDefinitions();
@@ -54,19 +64,6 @@ export function useStrategyOverlay({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
   }, [onAlert, klines, chart, candleSeries]);
-
-  // 从 localStorage 加载策略（仅一次）
-  useEffect(() => {
-    const raw = localStorage.getItem("chartStrategies");
-    if (raw) {
-      const saved = safeParseActiveStrategies(raw);
-      const valid = saved.filter((s) => strategyRegistry.get(s.id));
-      if (valid.length) {
-        setActiveStrategies(valid);
-        console.log(`[useStrategyOverlay] 从 localStorage 恢复 ${valid.length} 个策略`);
-      }
-    }
-  }, []);
 
   // 保存到 localStorage
   useEffect(() => {
@@ -234,7 +231,6 @@ export function useStrategyOverlay({
       cancelled = true;
     };
   // 关键：依赖 klines.length 确保数据更新时重新计算策略
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStrategies, klines.length, chartReady, symbol]);
 
   // 交易对变化时清理
@@ -247,7 +243,6 @@ export function useStrategyOverlay({
     strategyLineRefs.current.clear();
     setStrategyOutputs(new Map());
     dataGenRef.current += 1;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
   const addStrategy = useCallback((def: StrategyDefinition) => {

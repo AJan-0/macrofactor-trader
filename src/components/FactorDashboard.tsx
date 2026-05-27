@@ -74,7 +74,7 @@ export default function FactorDashboard({
         <div className="px-2 pt-2">
           <RealtimeIndicator
             isRealtime={isRealtime}
-            lastUpdate={lastUpdate || Date.now()}
+            lastUpdate={lastUpdate ?? 0}
             updates={realtimeUpdates || []}
           />
         </div>

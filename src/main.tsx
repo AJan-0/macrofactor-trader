@@ -16,14 +16,33 @@ window.addEventListener('unhandledrejection', (event) => {
 })
 
 // 注册 Service Worker（P1 性能优化）
+// 开发环境使用 cache-first service worker 会缓存 Vite 生成的模块，容易造成白屏或旧脚本残留。
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('[SW] 注册成功:', registration.scope)
+    if (import.meta.env.PROD) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+          console.log('[SW] 注册成功:', registration.scope)
+        })
+        .catch((error) => {
+          console.log('[SW] 注册失败:', error)
+        })
+      return
+    }
+
+    navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .then(() => caches.keys())
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.includes('macrofactor'))
+          .map((key) => caches.delete(key)),
+      ))
+      .then(() => {
+        console.log('[SW] 开发环境已清理旧缓存')
       })
       .catch((error) => {
-        console.log('[SW] 注册失败:', error)
+        console.log('[SW] 开发环境清理失败:', error)
       })
   })
 }

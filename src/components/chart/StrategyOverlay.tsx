@@ -246,7 +246,6 @@ export default function StrategyOverlay({
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStrategies, chartReady, klines, chart, candleSeries, symbol]);
 
   // Cleanup when symbol/timeframe changes

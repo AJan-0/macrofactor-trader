@@ -43,6 +43,23 @@ export interface LoadProgress {
   totalCount: number
 }
 
+interface KlineApiClient {
+  get(
+    path: string,
+    options: { params: Record<string, string | number | undefined> }
+  ): Promise<{ data?: { data?: KlineData[] } }>
+}
+
+interface RealtimeCandle {
+  ts: string | number
+  o: string | number
+  h: string | number
+  l: string | number
+  c: string | number
+  vol: string | number
+  volCcyQuote?: string | number
+}
+
 /**
  * L1内存LRU缓存
  */
@@ -280,7 +297,7 @@ class KlineValidator {
 export class KlineDataManager {
   private l1Cache: L1MemoryCache
   private l2Cache: L2IndexedDBCache
-  private apiClient: any // axios instance
+  private apiClient?: KlineApiClient
   private progressCallbacks: Array<(progress: LoadProgress) => void> = []
   private metrics: CacheMetrics = {
     l1Hits: 0,
@@ -295,7 +312,7 @@ export class KlineDataManager {
   private preloadingTasks = new Map<string, Promise<KlineData[]>>()
   private realTimeBuffer = new Map<string, Map<string, KlineData[]>>()
 
-  constructor(apiClient?: any) {
+  constructor(apiClient?: KlineApiClient) {
     this.l1Cache = new L1MemoryCache()
     this.l2Cache = new L2IndexedDBCache()
     this.apiClient = apiClient
@@ -424,8 +441,19 @@ export class KlineDataManager {
       ...(endTime && { endTime }),
     }
 
-    const response = await this.apiClient.get('/api/klines', { params })
-    return response.data.data || []
+    if (this.apiClient) {
+      const response = await this.apiClient.get('/api/klines', { params })
+      return response.data?.data || []
+    }
+
+    const search = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) search.set(key, String(value))
+    })
+    const response = await fetch(`/api/klines?${search}`)
+    if (!response.ok) throw new Error(`Kline API HTTP ${response.status}`)
+    const body = await response.json() as { data?: KlineData[] }
+    return body.data || []
   }
 
   /**
@@ -434,7 +462,7 @@ export class KlineDataManager {
   async updateRealtimeKline(
     symbol: string,
     timeframe: string,
-    candle: any
+    candle: RealtimeCandle
   ): Promise<void> {
     // 保存到缓冲区
     if (!this.realTimeBuffer.has(symbol)) {
@@ -448,14 +476,14 @@ export class KlineDataManager {
 
     const klines = buffer.get(timeframe)!
     const newKline: KlineData = {
-      timestamp: parseInt(candle.ts),
+      timestamp: Number(candle.ts),
       symbol,
-      open: parseFloat(candle.o),
-      high: parseFloat(candle.h),
-      low: parseFloat(candle.l),
-      close: parseFloat(candle.c),
-      volume: parseFloat(candle.vol),
-      quoteAssetVolume: parseFloat(candle.volCcyQuote),
+      open: parseFloat(String(candle.o)),
+      high: parseFloat(String(candle.h)),
+      low: parseFloat(String(candle.l)),
+      close: parseFloat(String(candle.c)),
+      volume: parseFloat(String(candle.vol)),
+      quoteAssetVolume: parseFloat(String(candle.volCcyQuote ?? 0)),
       numberOfTrades: 0,
       takerBuyBaseAssetVolume: 0,
       takerBuyQuoteAssetVolume: 0,

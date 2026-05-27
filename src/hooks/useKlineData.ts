@@ -186,9 +186,12 @@ export function useKlineData(
       klinesRef.current = cached;
       metaRef.current.latestStoredTime = cached[cached.length - 1].time;
       metaRef.current.isInitialized = true;
-      setDataVersion(v => v + 1);
-      setIsLoading(false);
-      setIsTransitioning(false);
+      queueMicrotask(() => {
+        if (cancelled || currentRequestId !== requestIdRef.current) return;
+        setDataVersion(v => v + 1);
+        setIsLoading(false);
+        setIsTransitioning(false);
+      });
       console.log(`[useKlineData] ⚡ ${cached.length} bars from cache (${symbol} ${timeframe})`);
       
       // 后台检查增量更新
@@ -206,17 +209,22 @@ export function useKlineData(
 
     // 【v2.0】无缓存时，保留旧数据，标记为 transitioning
     const hasOldData = prevDataRef.current.length > 0 && prevKeyRef.current !== currentKey;
-    if (hasOldData) {
-      // 保留旧数据，但标记为过渡状态
-      setIsTransitioning(true);
-      // 不立即清空 klinesRef，让旧数据继续显示
-    } else {
-      // 没有旧数据，显示 loading
+    queueMicrotask(() => {
+      if (cancelled || currentRequestId !== requestIdRef.current) return;
+
+      if (hasOldData) {
+        // 保留旧数据，但标记为过渡状态
+        setIsTransitioning(true);
+      } else {
+        // 没有旧数据，显示 loading
+        setIsLoading(true);
+      }
+
+      setError(null);
+    });
+    if (!hasOldData) {
       klinesRef.current = [];
-      setIsLoading(true);
     }
-    
-    setError(null);
     metaRef.current = { latestStoredTime: 0, isInitialized: false };
 
     async function init() {
