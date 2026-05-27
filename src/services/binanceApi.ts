@@ -12,6 +12,7 @@ const BINANCE_BASE = "https://api.binance.com/api/v3";
 const BINANCE_SYMBOL_MAP: Record<AssetSymbol, string> = {
   "BTC-USDT": "BTCUSDT",
   "ETH-USDT": "ETHUSDT",
+  "SOL-USDT": "SOLUSDT",
   "GC=F": "PAXGUSDT", // PAXG = Paxos Gold
 };
 

@@ -11,6 +11,7 @@ import MobileSheet from "@/components/MobileSheet";
 import NewsFeed from "@/components/NewsFeed";
 import { useAppStore } from "@/store/appStore";
 import { useFullscreen } from "@/hooks/useFullscreen";
+import { useRealtimeFactors } from "@/hooks/useRealtimeFactors";
 import { TrendingUpIcon, TrendingDownIcon, MinusIcon, FullscreenIcon, FullscreenExitIcon } from "@/components/icons";
 import {
   loadUserFactors, saveUserFactors, resetToDefault, applyWeightTemplate,
@@ -45,6 +46,19 @@ export default function Dashboard() {
   const [backtestRecords, setBacktestRecords] = useState<BacktestRecord[]>([]);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
   const [lastUpdate] = useState<string>(() => new Date().toLocaleTimeString());
+  
+  // 实时因子系统
+  const {
+    factors: realtimeFactors,
+    combination: realtimeCombo,
+    isRealtime,
+    lastUpdate: realtimeLastUpdate,
+    updates: realtimeUpdates,
+    toggleFactor: realtimeToggleFactor,
+    updateFactorWeight: realtimeUpdateWeight,
+    updateFactorDirection: realtimeUpdateDirection,
+  } = useRealtimeFactors();
+  
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -64,16 +78,24 @@ export default function Dashboard() {
   }, []);
 
   const toggleFactor = useCallback((id: string) => {
-    updateFactors(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
-  }, [updateFactors]);
+    if (isRealtime) {
+      realtimeToggleFactor(id);
+    } else {
+      updateFactors(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
+    }
+  }, [isRealtime, realtimeToggleFactor, updateFactors]);
 
   const adjustProbability = useCallback((id: string, prob: number) => {
     updateFactors(prev => prev.map(f => f.id === id ? { ...f, probability: prob } : f));
   }, [updateFactors]);
 
   const adjustWeight = useCallback((id: string, weight: number) => {
-    updateFactors(prev => prev.map(f => f.id === id ? { ...f, weight } : f));
-  }, [updateFactors]);
+    if (isRealtime) {
+      realtimeUpdateWeight(id, weight);
+    } else {
+      updateFactors(prev => prev.map(f => f.id === id ? { ...f, weight } : f));
+    }
+  }, [isRealtime, realtimeUpdateWeight, updateFactors]);
 
   const addCustom = useCallback((f: FactorItem) => {
     updateFactors(prev => [...prev, f]);
@@ -140,6 +162,9 @@ export default function Dashboard() {
         onDisableAll={handleDisableAll}
         onEnableThisWeek={handleEnableThisWeek}
         onEnableNextWeek={handleEnableNextWeek}
+        isRealtime={isRealtime}
+        lastUpdate={realtimeLastUpdate}
+        realtimeUpdates={realtimeUpdates}
       />
     ) : mobileTab === "news" ? (
       <NewsFeed onAddAsFactor={addCustom} />
@@ -220,6 +245,9 @@ export default function Dashboard() {
               onDisableAll={handleDisableAll}
               onEnableThisWeek={handleEnableThisWeek}
               onEnableNextWeek={handleEnableNextWeek}
+              isRealtime={isRealtime}
+              lastUpdate={realtimeLastUpdate}
+              realtimeUpdates={realtimeUpdates}
             />
           </ErrorBoundary>
         </div>

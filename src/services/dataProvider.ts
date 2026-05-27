@@ -64,6 +64,7 @@ const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 const CG_SYMBOL_MAP: Record<AssetSymbol, string> = {
   "BTC-USDT": "bitcoin",
   "ETH-USDT": "ethereum",
+  "SOL-USDT": "solana",
   "GC=F": "pax-gold",
 };
 
@@ -122,6 +123,7 @@ const BINANCE_BASE = "https://api.binance.com/api/v3";
 const BN_SYMBOL_MAP: Record<AssetSymbol, string> = {
   "BTC-USDT": "BTCUSDT",
   "ETH-USDT": "ETHUSDT",
+  "SOL-USDT": "SOLUSDT",
   "GC=F": "PAXGUSDT",
 };
 

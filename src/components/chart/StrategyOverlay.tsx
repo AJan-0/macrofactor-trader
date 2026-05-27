@@ -196,21 +196,45 @@ export default function StrategyOverlay({
               value: d.value,
             }));
           series.setData(cleanData);
+          // 优化视觉效果：根据线条类型设置样式
+          if (line.style === "dashed") {
+            series.applyOptions({
+              lineStyle: 2, // Dashed
+              lineWidth: Math.min(3, Math.max(1, line.lineWidth)) as 1 | 2 | 3 | 4,
+            });
+          } else if (line.style === "dotted") {
+            series.applyOptions({
+              lineStyle: 3, // Dotted
+              lineWidth: 1,
+            });
+          }
         }
       }
 
-      // Draw signal markers
+      // Draw signal markers with enhanced visuals
       const allSignals = Array.from(newOutputs.values()).flatMap(
         (o: StrategyOutput) => o.signals
       );
-      const signalMarkers = allSignals.map((s) => ({
-        time: s.time as Time,
-        position: (s.direction === "buy" ? "belowBar" : "aboveBar") as "belowBar" | "aboveBar",
-        color: s.direction === "buy" ? "#22c55e" : "#ef4444",
-        shape: (s.direction === "buy" ? "arrowUp" : "arrowDown") as "arrowUp" | "arrowDown",
-        text: s.label.length > 10 ? s.label.slice(0, 8) + ".." : s.label,
-        size: 1 + Math.round(s.strength * 2),
-      }));
+      const signalMarkers = allSignals.map((s) => {
+        // 根据信号强度调整大小和颜色
+        const isBuy = s.direction === "buy";
+        const baseSize = 1 + Math.round(s.strength * 2);
+        const size = Math.min(baseSize, 4) as 1 | 2 | 3 | 4;
+        
+        // 使用更鲜艳的颜色
+        const color = isBuy 
+          ? s.strength > 0.7 ? "#00E676" : s.strength > 0.4 ? "#69F0AE" : "#B9F6CA"
+          : s.strength > 0.7 ? "#FF1744" : s.strength > 0.4 ? "#FF5252" : "#FF8A80";
+        
+        return {
+          time: s.time as Time,
+          position: (isBuy ? "belowBar" : "aboveBar") as "belowBar" | "aboveBar",
+          color,
+          shape: (isBuy ? "arrowUp" : "arrowDown") as "arrowUp" | "arrowDown",
+          text: s.label.length > 8 ? s.label.slice(0, 6) + ".." : s.label,
+          size,
+        };
+      });
       signalMarkers.sort((a, b) => (a.time as number) - (b.time as number));
       if (signalMarkers.length > 0 && candleSeries) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

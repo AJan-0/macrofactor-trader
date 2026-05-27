@@ -26,6 +26,7 @@ const TIMEFRAMES = [
 const SYMBOLS = [
   { key: "BTC-USDT", label: "BTC", labelEn: "BTC/USD", color: "#f59e0b" },
   { key: "ETH-USDT", label: "ETH", labelEn: "ETH/USD", color: "#6366f1" },
+  { key: "SOL-USDT", label: "SOL", labelEn: "SOL/USD", color: "#14f195" },
   { key: "GC=F", label: "黄金", labelEn: "Gold", color: "#eab308" },
 ];
 

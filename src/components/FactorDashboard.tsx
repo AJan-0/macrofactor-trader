@@ -9,6 +9,7 @@ import { getEndDateLabel } from "@/data/factorLibrary";
 import FactorLibrary from "./FactorLibrary";
 import NewsFeed from "./NewsFeed";
 import CorrelationGraph from "./CorrelationGraph";
+import { RealtimeIndicator } from "./RealtimeIndicator";
 
 const CAT_COLOR: Record<string, string> = {
   Monetary: "#3b82f6", Inflation: "#f59e0b", Geopolitics: "#8b5cf6",
@@ -33,12 +34,16 @@ interface Props {
   onDisableAll?: () => void;
   onEnableThisWeek?: () => void;
   onEnableNextWeek?: () => void;
+  isRealtime?: boolean;
+  lastUpdate?: number;
+  realtimeUpdates?: Array<{ factorId: string; reason: string; timestamp: number }>;
 }
 
 export default function FactorDashboard({
   combo, factors, backtestRecords, backtestSummary,
   onToggleFactor, onAdjustProb, onAdjustWeight, onAddCustom, onReset, onApplyTemplate,
   onEnableAll, onDisableAll, onEnableThisWeek, onEnableNextWeek,
+  isRealtime, lastUpdate, realtimeUpdates,
 }: Props) {
   const { t } = useI18n();
   const setHoverTimestamp = useAppStore(s => s.setHoverTimestamp);
@@ -63,6 +68,17 @@ export default function FactorDashboard({
     <div className="h-full flex flex-col bg-[#111827] overflow-hidden relative">
       {/* 预测面板 */}
       <PredictionPanel combo={combo} backtestSummary={backtestSummary} onToggleView={setView} onOpenLibrary={() => setShowLibrary(true)} onEnableThisWeek={onEnableThisWeek} onEnableNextWeek={onEnableNextWeek} />
+
+      {/* 实时状态指示器 */}
+      {isRealtime !== undefined && (
+        <div className="px-2 pt-2">
+          <RealtimeIndicator
+            isRealtime={isRealtime}
+            lastUpdate={lastUpdate || Date.now()}
+            updates={realtimeUpdates || []}
+          />
+        </div>
+      )}
 
       {/* 分类统计 */}
       {view === "factors" && <CategorySummary signals={combo.activeFactors} />}

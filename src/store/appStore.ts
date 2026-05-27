@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type AssetSymbol = "BTC-USDT" | "ETH-USDT" | "GC=F";
+export type AssetSymbol = "BTC-USDT" | "ETH-USDT" | "SOL-USDT" | "GC=F";
 export type Timeframe = "1m" | "3m" | "5m" | "15m" | "1H" | "4H" | "1D";
 export type EventCategory = "Macro" | "GeoPolitics" | "CryptoNative";
 export type EventSubcategory = "FOMC" | "CPI" | "NFP" | "War" | "ETF" | "FOMC_Forecast" | "CPI_Forecast" | "Other";

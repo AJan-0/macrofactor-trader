@@ -29,6 +29,7 @@ export interface RealtimePrice {
 const SYMBOL_MAP: Record<AssetSymbol, string> = {
   "BTC-USDT": "BTC",
   "ETH-USDT": "ETH",
+  "SOL-USDT": "SOL",
   "GC=F": "PAXG", // PAXG = Paxos Gold, 1:1 锚定实物黄金
 };
 
