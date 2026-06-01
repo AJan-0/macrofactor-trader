@@ -35,6 +35,8 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       chunkSizeWarningLimit: 600,
+      // 添加内容哈希确保缓存失效
+      assetsDir: 'assets',
       rollupOptions: {
         output: {
           manualChunks: {
