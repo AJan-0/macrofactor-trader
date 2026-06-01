@@ -1,15 +1,10 @@
 /**
- * useKlineData Hook — 增强版K线数据管道 (v2.0)
+ * useKlineData Hook — 增强版K线数据管道 (v2.1)
  * 
- * 升级内容：
- *   - 集成 klineStorage 长期存储
- *   - 支持5年历史数据
- *   - 自动增量更新
- *   - 智能降采样
- *   - 多时间周期统一管理
- *   - 【v2.0】预加载缓存 + 平滑过渡（解决切换卡顿）
- *   - 【v2.0】LRU 内存缓存，保留最近 5 个组合
- *   - 【v2.0】后台加载，避免空白闪烁
+ * 修复内容：
+ *   - 修复 symbol 切换时缓存不更新的问题
+ *   - 确保每次 symbol/timeframe 变化时重新加载数据
+ *   - 清除旧数据避免显示错误
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -27,7 +22,7 @@ export interface UseKlineDataResult {
   klinesRef: React.MutableRefObject<KlineData[]>;
   dataVersion: number;
   isLoading: boolean;
-  isTransitioning: boolean; // 【v2.0】过渡状态：正在切换到新数据
+  isTransitioning: boolean;
   error: string | null;
   bumpVersion: () => void;
   storageStats: {
@@ -35,11 +30,9 @@ export interface UseKlineDataResult {
     storageSizeMB: number;
     dateRange: { start: Date; end: Date };
   } | null;
-  // 【v2.0】预加载控制
   prefetch: (symbol: AssetSymbol, timeframe: Timeframe) => void;
 }
 
-// 兼容旧版类型
 export interface KlineData {
   time: number;
   open: number;
@@ -49,19 +42,19 @@ export interface KlineData {
   volume: number;
 }
 
-// 【v2.0】LRU 缓存条目
+// LRU 缓存条目
 interface CacheEntry {
   symbol: AssetSymbol;
   timeframe: Timeframe;
   data: KlineData[];
-  timestamp: number; // 缓存时间
-  accessCount: number; // 访问次数（用于 LRU）
+  timestamp: number;
+  accessCount: number;
 }
 
-// 【v2.0】全局 LRU 缓存（跨组件共享）
+// 全局 LRU 缓存（跨组件共享）
 const GLOBAL_CACHE = new Map<string, CacheEntry>();
-const MAX_CACHE_SIZE = 5; // 最多缓存 5 个组合
-const CACHE_TTL_MS = 5 * 60 * 1000; // 缓存有效期 5 分钟
+const MAX_CACHE_SIZE = 5;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 function getCacheKey(symbol: AssetSymbol, timeframe: Timeframe): string {
   return `${symbol}::${timeframe}`;
@@ -72,13 +65,11 @@ function getFromCache(symbol: AssetSymbol, timeframe: Timeframe): KlineData[] | 
   const entry = GLOBAL_CACHE.get(key);
   if (!entry) return null;
   
-  // 检查是否过期
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
     GLOBAL_CACHE.delete(key);
     return null;
   }
   
-  // 更新访问计数
   entry.accessCount++;
   return entry.data;
 }
@@ -86,7 +77,6 @@ function getFromCache(symbol: AssetSymbol, timeframe: Timeframe): KlineData[] | 
 function setCache(symbol: AssetSymbol, timeframe: Timeframe, data: KlineData[]) {
   const key = getCacheKey(symbol, timeframe);
   
-  // 如果缓存已满，淘汰最少使用的
   if (GLOBAL_CACHE.size >= MAX_CACHE_SIZE && !GLOBAL_CACHE.has(key)) {
     let minAccess = Infinity;
     let minKey = '';
@@ -111,7 +101,7 @@ function setCache(symbol: AssetSymbol, timeframe: Timeframe, data: KlineData[]) 
   });
 }
 
-// 【v2.0】后台预加载队列
+// 后台预加载队列
 const PREFETCH_QUEUE = new Set<string>();
 let isPrefetching = false;
 
@@ -126,7 +116,6 @@ async function processPrefetchQueue() {
     const [symbol, timeframe] = key.split('::') as [AssetSymbol, Timeframe];
     if (!symbol || !timeframe) continue;
     
-    // 如果已经在缓存中，跳过
     if (getFromCache(symbol, timeframe)) continue;
     
     try {
@@ -151,7 +140,7 @@ export function useKlineData(
   const klinesRef = useRef<KlineData[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isTransitioning, setIsTransitioning] = useState(false); // 【v2.0】
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<UseKlineDataResult['storageStats']>(null);
   
@@ -162,9 +151,12 @@ export function useKlineData(
     isInitialized: false,
   });
   
-  // 【v2.0】记录上一个有效的 symbol/timeframe，用于保留旧数据
+  // 记录上一个有效的 symbol/timeframe
   const prevKeyRef = useRef<string>('');
   const prevDataRef = useRef<KlineData[]>([]);
+  
+  // 强制清空数据的标志
+  const forceClearRef = useRef(false);
 
   useEffect(() => {
     // 防御性检查
@@ -178,11 +170,19 @@ export function useKlineData(
     let cancelled = false;
     const abortCtrl = new AbortController();
     const currentKey = getCacheKey(symbol, timeframe);
+    
+    // 如果 symbol/timeframe 变化了，强制清空旧数据
+    if (prevKeyRef.current !== '' && prevKeyRef.current !== currentKey) {
+      console.log(`[useKlineData] Symbol/Timeframe changed: ${prevKeyRef.current} -> ${currentKey}`);
+      klinesRef.current = [];
+      forceClearRef.current = true;
+      setDataVersion(v => v + 1); // 触发重新渲染
+    }
 
-    // 【v2.0】检查缓存：如果缓存中有数据，先显示缓存数据，避免空白
+    // 检查缓存（symbol 切换后不使用缓存，强制重新加载）
     const cached = getFromCache(symbol, timeframe);
-    if (cached && cached.length > 0) {
-      // 有缓存，直接显示，不显示 loading
+    if (cached && cached.length > 0 && !forceClearRef.current && prevKeyRef.current === currentKey) {
+      // 有缓存且不是首次加载，直接显示
       klinesRef.current = cached;
       metaRef.current.latestStoredTime = cached[cached.length - 1].time;
       metaRef.current.isInitialized = true;
@@ -200,23 +200,24 @@ export function useKlineData(
       // 保存当前状态用于下次切换
       prevKeyRef.current = currentKey;
       prevDataRef.current = [...cached];
+      forceClearRef.current = false;
       
       return () => {
         cancelled = true;
         abortCtrl.abort();
       };
     }
+    
+    forceClearRef.current = false;
 
-    // 【v2.0】无缓存时，保留旧数据，标记为 transitioning
+    // 无缓存时，保留旧数据，标记为 transitioning
     const hasOldData = prevDataRef.current.length > 0 && prevKeyRef.current !== currentKey;
     queueMicrotask(() => {
       if (cancelled || currentRequestId !== requestIdRef.current) return;
 
       if (hasOldData) {
-        // 保留旧数据，但标记为过渡状态
         setIsTransitioning(true);
       } else {
-        // 没有旧数据，显示 loading
         setIsLoading(true);
       }
 
@@ -246,7 +247,7 @@ export function useKlineData(
         const storedData = await getLatestKlines(symbol, timeframe, 2000);
         
         if (storedData.length > 0 && !cancelled) {
-          // 【v2.0】保存到缓存
+          // 保存到缓存
           setCache(symbol, timeframe, storedData);
           
           klinesRef.current = storedData;
@@ -254,7 +255,7 @@ export function useKlineData(
           metaRef.current.isInitialized = true;
           setDataVersion(v => v + 1);
           setIsLoading(false);
-          setIsTransitioning(false); // 【v2.0】过渡完成
+          setIsTransitioning(false);
           
           console.log(`[useKlineData] 📦 ${storedData.length} bars from storage (${symbol} ${timeframe})`);
           
@@ -266,7 +267,7 @@ export function useKlineData(
           await loadFullHistory(symbol, timeframe, abortCtrl.signal);
         }
         
-        // 【v2.0】保存当前状态
+        // 保存当前状态
         if (!cancelled) {
           prevKeyRef.current = currentKey;
           prevDataRef.current = [...klinesRef.current];
@@ -308,7 +309,7 @@ export function useKlineData(
         // 存储到 IndexedDB
         await storeKlines(sym, tf, data);
         
-        // 【v2.0】保存到缓存
+        // 保存到缓存
         setCache(sym, tf, data);
         
         klinesRef.current = data;
@@ -330,7 +331,7 @@ export function useKlineData(
         
         setDataVersion(v => v + 1);
         setIsLoading(false);
-        setIsTransitioning(false); // 【v2.0】过渡完成
+        setIsTransitioning(false);
       } catch (err) {
         if (signal.aborted) return;
         throw err;
@@ -380,7 +381,7 @@ export function useKlineData(
           klinesRef.current = mergeKlines(klinesRef.current, newBars);
           metaRef.current.latestStoredTime = newBars[newBars.length - 1].time;
           
-          // 【v2.0】更新缓存
+          // 更新缓存
           setCache(sym, tf, klinesRef.current);
           
           setDataVersion(v => v + 1);
@@ -412,18 +413,16 @@ export function useKlineData(
 
   const bumpVersion = useCallback(() => setDataVersion(v => v + 1), []);
   
-  // 【v2.0】预加载函数：提前加载指定组合的数据到缓存
+  // 预加载函数
   const prefetch = useCallback((prefetchSymbol: AssetSymbol, prefetchTimeframe: Timeframe) => {
     const key = getCacheKey(prefetchSymbol, prefetchTimeframe);
     
-    // 如果已经在缓存或队列中，跳过
     if (getFromCache(prefetchSymbol, prefetchTimeframe)) return;
     if (PREFETCH_QUEUE.has(key)) return;
     
     PREFETCH_QUEUE.add(key);
     console.log(`[useKlineData] Queued prefetch: ${key}`);
     
-    // 延迟启动预加载，避免阻塞当前操作
     setTimeout(() => {
       processPrefetchQueue();
     }, 100);
@@ -433,15 +432,15 @@ export function useKlineData(
     klinesRef, 
     dataVersion, 
     isLoading, 
-    isTransitioning, // 【v2.0】
+    isTransitioning,
     error, 
     bumpVersion,
     storageStats: stats,
-    prefetch, // 【v2.0】
+    prefetch,
   };
 }
 
-// ── 辅助函数 ──
+// 辅助函数
 
 function mergeKlines(existing: KlineData[], incoming: KlineData[]): KlineData[] {
   const map = new Map<number, KlineData>();

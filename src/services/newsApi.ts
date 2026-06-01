@@ -2,6 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NewsItem, Sentiment } from "@/data/mockNews";
+import { MOCK_NEWS } from "@/data/mockNews";
 
 const CG_NEWS_URL = "https://api.coingecko.com/api/v3/news";
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟
@@ -87,8 +88,9 @@ export async function fetchRealNews(): Promise<NewsItem[]> {
     _cacheTs = Date.now();
     return _cache;
   } catch (err) {
-    console.warn("[NewsAPI] Failed to fetch real news:", err);
-    return []; // 降级：空数组，前端显示"新闻暂不可用"
+    console.warn("[NewsAPI] Failed to fetch real news, falling back to mock data:", err);
+    // 降级到 mock 数据，保证用户界面总有内容展示
+    return [...MOCK_NEWS];
   }
 }
 

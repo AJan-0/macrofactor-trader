@@ -13,7 +13,7 @@ import ChartCanvas from "./chart/ChartCanvas";
 import { useStrategyOverlay } from "@/hooks/useStrategyOverlay";
 import StrategyControlPanel from "./chart/StrategyControlPanel";
 import MobileChartHeader from "./chart/MobileChartHeader";
-import MobileTradingPanel from "./chart/MobileTradingPanel";
+// import MobileTradingPanel from "./chart/MobileTradingPanel";
 
 let _factorCache: { data: MacroEvent[]; ts: number } | null = null;
 const FACTOR_CACHE_MS = 300_000; // 5-minute TTL
@@ -68,6 +68,9 @@ const ChartWidget = memo(function ChartWidget() {
   const setTimeframe = useAppStore((s) => s.setTimeframe);
   const { klinesRef, dataVersion, isLoading: klineLoading, error, bumpVersion } = useKlineData(symbol, timeframe);
   const { price, changePct } = useRealtimePrice(symbol);
+
+  // 强制重新渲染 key，确保 symbol 切换时 ChartCanvas 完全重新挂载
+  const chartKey = `${symbol}-${timeframe}-${dataVersion}`;
 
   // 移动端性能优化 - K 线数据降采样
   const { klines: optimizedKlines, isOptimized } = useChartPerformance({
@@ -175,6 +178,7 @@ const ChartWidget = memo(function ChartWidget() {
       {/* Chart Canvas */}
       <div className="flex-1 min-h-0 relative">
         <ChartCanvas
+          key={chartKey}
           ref={chartCanvasRef}
           klines={isOptimized ? optimizedKlines : klinesRef.current}
           events={loadedFactors}
@@ -249,11 +253,8 @@ const ChartWidget = memo(function ChartWidget() {
         klines={klinesRef.current}
       />
 
-      {/* 移动端 TradingView 风格交易面板 */}
-      <MobileTradingPanel
-        price={price}
-        symbol={symbol}
-      />
+      {/* 移动端 TradingView 风格交易面板 - 已禁用（无效组件） */}
+      {/* <MobileTradingPanel price={price} symbol={symbol} /> */}
     </div>
   );
 });

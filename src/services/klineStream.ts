@@ -1,5 +1,5 @@
 /**
- * K-line WebSocket Stream Service (v0.4.0)
+ * K-line WebSocket Stream Service (v0.4.1)
  *
  * 连接后端 /ws/klines 端点，接收 OKX 实时 K 线增量推送。
  * 替代原有的 30s 轮询 fetchRealtimePrice 机制。
@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Timeframe } from '@/store/appStore';
 
-// ── 类型 ──
+// 类型
 
 export interface KlineCandle {
   time: number;
@@ -27,15 +27,15 @@ export interface KlineCandle {
   low: number;
   close: number;
   volume: number;
-  confirm: boolean;   // bar 已收线
-  is_new: boolean;    // 新 bar 的第一笔
+  confirm: boolean;   // bar 已收盘
+  is_new: boolean;    // 新 bar 的第一根
   symbol: string;
   timeframe: string;
 }
 
 export type CandleHandler = (candle: KlineCandle) => void;
 
-// ── 配置 ──
+// 配置
 
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
@@ -46,7 +46,7 @@ function wsUrl(): string {
   return `${proto}//${location.host}/ws/klines`;
 }
 
-// ── 单例管理器 ──
+// 单例管理器
 
 interface SubEntry {
   symbol: string;
@@ -213,7 +213,7 @@ class KlineStreamManager {
   }
 }
 
-// ── 全局单例 ──
+// 全局单例
 
 let _inst: KlineStreamManager | null = null;
 
@@ -227,7 +227,7 @@ export function disconnectKlineStream(): void {
   _inst = null;
 }
 
-// ── 增量合并工具 ──
+// 增量合并工具
 
 /**
  * 将实时 candle 增量合并到 K 线数组。
@@ -269,7 +269,7 @@ export function mergeCandle(
   return klines;
 }
 
-// ── React Hook ──
+// React Hook
 
 /**
  * 订阅实时 K 线流。

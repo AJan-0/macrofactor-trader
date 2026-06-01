@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo, useState, useCallback } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import { useTouchGestures } from "@/hooks/useTouchGestures";
 import {
   createChart,
@@ -216,7 +216,6 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     high: k.high,
     low: k.low,
     close: k.close,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [klines, dataVersion]);
 
   const volumeData = useMemo(() => {
@@ -226,13 +225,11 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
       value: k.volume,
       color: k.close >= k.open ? `${t.up}30` : `${t.down}30`,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [klines, dataVersion]);
 
   const markers = useMemo(() => {
     const histFactors = events.filter((f) => !f.is_forecast);
     return buildMarkers(histFactors, klines, [], []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, klines, dataVersion]);
 
   // Update data when klines/events change
@@ -248,7 +245,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     volumeRef.current.setData(volumeData);
     chartRef.current.priceScale("right").applyOptions({ autoScale: true });
 
-    // 始终设置markers，空数组时清空旧标记
+    // 始终设置markers，空数组时清除旧标记
     // lightweight-charts v4.2 type defs omit setMarkers
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (candleRef.current as any).setMarkers?.(markers || []);
@@ -270,7 +267,7 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
     } else {
       isUpdatingRef.current = false;
     }
-  }, [candleData, volumeData, markers, timeframe]);
+  }, [candleData, volumeData, markers, timeframe, dataVersion]);
 
   // 移动端触摸手势支持 - TradingView 风格
   const [longPressInfo, setLongPressInfo] = useState<{ time: number; price: number } | null>(null);
@@ -319,154 +316,76 @@ const ChartCanvas = forwardRef<ChartCanvasRef, ChartCanvasProps>(function ChartC
       hlSeries.setData([]);
       return;
     }
-    const minKlineTime = Math.min(...klines.map((k) => k.time));
-    const maxKlineTime = Math.max(...klines.map((k) => k.time));
-    const window = 5 * 86400;
-    if (
-      hoverTimestamp < minKlineTime - window ||
-      hoverTimestamp > maxKlineTime + window
-    ) {
-      hlSeries.setData([]);
-      return;
-    }
-    const highlightMin = hoverTimestamp - window;
-    const highlightMax = hoverTimestamp + window;
-    const rangeKlines = klines.filter(
-      (k) => k.time >= highlightMin && k.time <= highlightMax
-    );
-    const rangeHigh =
-      rangeKlines.length > 0
-        ? Math.max(...rangeKlines.map((k) => k.high))
-        : 0;
-    if (rangeHigh === 0) {
-      hlSeries.setData([]);
-      return;
-    }
-    const highlightData = klines
-      .filter((k) => k.time >= highlightMin && k.time <= highlightMax)
-      .map((k) => ({
-        time: k.time as Time,
-        value: rangeHigh * 1.02,
-        color: "#3b82f635",
-      }));
+    // 高亮对应时间戳的K线
+    const highlightData = klines.map((k) => ({
+      time: k.time as Time,
+      value: k.time === hoverTimestamp ? k.volume * 2 : 0,
+      color: k.time === hoverTimestamp ? "#3b82f680" : "#00000000",
+    }));
     hlSeries.setData(highlightData);
   }, [hoverTimestamp, klines]);
 
-  // Zoom to active timestamp
-  const activeTimestamp = useAppStore((s) => s.activeTimestamp);
-  const skipNextZoomRef = useRef(false);
+  // Strategy overlay rendering
   useEffect(() => {
-    if (!activeTimestamp || !chartRef.current) return;
-    if (skipNextZoomRef.current) {
-      skipNextZoomRef.current = false;
-      return;
-    }
-    if (klines.length) {
-      const minTime = klines[0].time;
-      const maxTime = klines[klines.length - 1].time;
-      if (
-        activeTimestamp < minTime - 86400 ||
-        activeTimestamp > maxTime + 86400
-      ) {
-        return;
-      }
-    }
-    try {
-      chartRef.current.timeScale().setVisibleRange({
-        from: (activeTimestamp - 5 * 86400) as Time,
-        to: (activeTimestamp + 5 * 86400) as Time,
-      });
-    } catch {
-      chartRef.current.timeScale().scrollToRealTime();
-    }
-  }, [activeTimestamp, klines]);
-
-  // 移动端图表控制
-  const [isCrosshairEnabled, setIsCrosshairEnabled] = useState(false);
-  
-  const handleZoomIn = useCallback(() => {
-    if (!chartRef.current) return;
-    const timeScale = chartRef.current.timeScale();
-    const currentSpacing = timeScale.options().barSpacing ?? 6;
-    timeScale.applyOptions({ barSpacing: Math.max(1, currentSpacing * 0.8) });
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    if (!chartRef.current) return;
-    const timeScale = chartRef.current.timeScale();
-    const currentSpacing = timeScale.options().barSpacing ?? 6;
-    timeScale.applyOptions({ barSpacing: Math.min(100, currentSpacing * 1.25) });
-  }, []);
-
-  const handleReset = useCallback(() => {
-    chartRef.current?.timeScale().fitContent();
-  }, []);
-
-  const handleToggleCrosshair = useCallback(() => {
-    setIsCrosshairEnabled(prev => {
-      const next = !prev;
-      chartRef.current?.applyOptions({
-        crosshair: {
-          mode: next ? 1 : 0,
-          vertLine: { visible: next, labelVisible: next },
-          horzLine: { visible: next, labelVisible: next },
-        }
-      });
-      return next;
+    if (!chartRef.current || !candleRef.current) return;
+    
+    // 为每个策略输出添加标记
+    strategyOutputs.forEach((output, strategyId) => {
+      if (!output.signals || output.signals.length === 0) return;
+      
+      const signalMarkers = output.signals.map((signal) => ({
+        time: signal.time as Time,
+        position: signal.direction === 'buy' ? 'belowBar' : 'aboveBar' as const,
+        color: signal.direction === 'buy' ? '#22c55e' : '#ef4444',
+        shape: signal.direction === 'buy' ? 'arrowUp' : 'arrowDown' as const,
+        text: `${strategyId}: ${signal.direction.toUpperCase()}`,
+        size: 1,
+      }));
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (candleRef.current as any).setMarkers?.(signalMarkers);
     });
-  }, []);
+  }, [strategyOutputs]);
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full min-h-[200px] lg:min-h-[400px] relative bg-[#111827]"
-    >
+    <div className="w-full h-full relative">
+      <div ref={containerRef} className="w-full h-full" />
       {longPressOverlay}
-      
-      {/* 移动端图表控制按钮 */}
       <MobileChartControls
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onReset={handleReset}
-        onToggleCrosshair={handleToggleCrosshair}
-        isCrosshairEnabled={isCrosshairEnabled}
+        onZoomIn={() => {}}
+        onZoomOut={() => {}}
+        onReset={() => chartRef.current?.timeScale().fitContent()}
+        onToggleCrosshair={() => {}}
+        isCrosshairEnabled={false}
         timeframe={timeframe}
       />
     </div>
   );
 });
 
-export default ChartCanvas;
-
 // Helper: build markers from events
 function buildMarkers(
   events: MacroEvent[],
   klines: KlineData[],
-  cats: string[],
-  imps: string[]
+  _futureEvents: MacroEvent[],
+  _upcomingFactors: MacroEvent[]
 ) {
-  if (!klines.length || !events.length) return [];
-  const minTime = Math.min(...klines.map((k) => k.time));
-  const maxTime = Math.max(...klines.map((k) => k.time));
-  const m = events
-    .filter(
-      (e) =>
-        e.timestamp >= minTime &&
-        e.timestamp <= maxTime &&
-        (!cats.length || cats.includes(e.category)) &&
-        (!imps.length || imps.includes(e.impact_level))
-    )
+  if (!klines.length) return [];
+  const minTime = klines[0].time;
+  const maxTime = klines[klines.length - 1].time;
+  return events
+    .filter((e) => e.timestamp >= minTime && e.timestamp <= maxTime)
     .map((e) => {
-      const s = IMPACT_STYLE[e.impact_level] || IMPACT_STYLE.low;
+      const style = IMPACT_STYLE[e.impact_level] || IMPACT_STYLE.low;
       return {
         time: e.timestamp as Time,
-        position: s.position,
-        color: s.color,
-        shape: s.shape as "arrowDown" | "arrowUp" | "circle" | "square",
-        text: e.title.length > 22 ? e.title.slice(0, 20) + ".." : e.title,
-        size: s.size,
+        position: style.position,
+        color: style.color,
+        shape: style.shape,
+        text: e.title.slice(0, 20),
+        size: style.size,
       };
     });
-  m.sort((a, b) => (a.time as number) - (b.time as number));
-  return m;
 }
+
+export default ChartCanvas;
