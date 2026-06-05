@@ -204,6 +204,7 @@ const Toolbar = memo(function Toolbar() {
 const ASSETS = [
   { key: "BTC-USDT", label: "asset.btc", color: "#f59e0b" },
   { key: "ETH-USDT", label: "asset.eth", color: "#3b82f6" },
+  { key: "SOL-USDT", label: "asset.sol", color: "#14f195" },
   { key: "GC=F", label: "asset.gold", color: "#fbbf24" },
 ] as const;
 

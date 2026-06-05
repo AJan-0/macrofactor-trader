@@ -59,6 +59,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "asset.btc": "BTC",
     "asset.eth": "ETH",
     "asset.gold": "GOLD",
+    "asset.sol": "SOL",
 
     // Narrative
     "narrative.title": "Macro Summary",
